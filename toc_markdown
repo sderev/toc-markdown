@@ -2,71 +2,78 @@
 
 import string
 import re
-import sys
+import argparse
 
 
-FILEPATH = sys.argv[1]
-
-
-def main():
+def generate_and_insert_toc(filepath):
     """
-    This script will generate a table of contents for a markdown file.
-    It will replace an existing TOC if one exists, or insert a new one if it does not.
+    This script generates a table of contents for a markdown file.
+    If an existing TOC is present, it replaces it, otherwise, it inserts a new one.
+    
+    Args:
+        filepath (str): The path to the markdown file.
     """
-    full_file = []
+    full_file = []  # Store all lines of the file
+    headers = []  # Store all headers found in the file
 
     # Regex pattern for headers
     header_pattern = re.compile(r"^(#{1,3}) (.*)$")
-    headers = []
 
     # TOC start and end line numbers
     toc_start = None
     toc_end = None
 
     # Flag for code blocks
-    code_block = False
+    is_in_code_block = False
 
-    with open(FILEPATH, "r") as file:
-        for line_number, line in enumerate(file):
-            full_file.append(line)
-
-            # Skips code blocks
-            if line.startswith("```"):
-                code_block = not code_block
-                continue
-            elif code_block:
-                continue
-
-            # Skips TOC
-            if line.startswith("## Table of Contents"):
-                continue
-
-            # Finds headers
-            header_match = header_pattern.match(line)
-            if header_match:
-                headers.append(header_match.group(0))
-
-            # Finds TOC start and end line numbers
-            if line.startswith("<!-- TOC -->"):
-                toc_start = line_number
-            elif line.startswith("<!-- /TOC -->"):
-                toc_end = line_number
-
-    toc = generate_toc(headers)
-
-    # Replaces TOC
-    if toc_start is not None and toc_end is not None:
-        replace_toc(full_file, toc, toc_start, toc_end)
-
-    # Inserts TOC
-    else:
-        for line in toc:
-            print(line)
+    try:
+        with open(filepath, "r") as file:
+            for line_number, line in enumerate(file):
+                full_file.append(line)
+    
+                if line.startswith("```"):
+                    # Flipping the boolean to track if we're in a code block
+                    is_in_code_block = not is_in_code_block
+                    continue
+                elif is_in_code_block or line.startswith("## Table of Contents"):
+                    continue
+    
+                # Finds headers
+                header_match = header_pattern.match(line)
+                if header_match:
+                    headers.append(header_match.group(0))
+    
+                # Finds TOC start and end line numbers
+                if line.startswith("<!-- TOC -->"):
+                    toc_start = line_number
+                elif line.startswith("<!-- /TOC -->"):
+                    toc_end = line_number
+    
+        toc = generate_toc(headers)
+    
+        # Replaces TOC
+        if toc_start is not None and toc_end is not None:
+            replace_toc(full_file, toc, toc_start, toc_end, filepath)
+    
+        # Inserts TOC
+        else:
+            for line in toc:
+                print(line)
+    except FileNotFoundError:
+        print(f"File {filepath} does not exist.")
+    except Exception as e:
+        print(f"An error occurred: {e}")
 
 
 def generate_toc(headers):
     """
     Generates a table of contents from a list of headers.
+    
+    Args:
+        headers (list): A list of markdown headers.
+
+    Returns:
+        list: A list of lines that make up the TOC.
     """
     special_chars = string.punctuation.replace("-", "").replace("_", "")
     toc = ["## Table of Contents\n"]
@@ -87,16 +94,31 @@ def generate_toc(headers):
     return toc
 
 
-def replace_toc(full_file, toc, toc_start, toc_end):
+def replace_toc(full_file, toc, toc_start, toc_end, filepath):
     """
     Replaces the existing TOC with the new one.
+    
+    Args:
+        full_file (list): A list of all lines in the file.
+        toc (list): A list of lines that make up the TOC.
+        toc_start (int): The line number where the TOC starts.
+        toc_end (int): The line number where the TOC ends.
+        filepath (str): The path to the file.
     """
-    with open(FILEPATH, "w") as file:
-        file.writelines(full_file[:toc_start])
-        for line in toc:
-            file.write(line + "\n")
-        file.writelines(full_file[toc_end + 1 :])
+    try:
+        with open(filepath, "w") as file:
+            file.writelines(full_file[:toc_start])
+            for line in toc:
+                file.write(line + "\n")
+            file.writelines(full_file[toc_end + 1 :])
+    except Exception as e:
+        print(f"An error occurred while writing to the file: {e}")
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Generate a table of contents for a markdown file.")
+    parser.add_argument('filepath', help='The path to the markdown file.')
+    args = parser.parse_args()
+    
+    generate_and_insert_toc(args.filepath)
+
