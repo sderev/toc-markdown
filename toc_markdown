@@ -1,0 +1,102 @@
+#! /usr/bin/python3
+
+import string
+import re
+import sys
+
+
+FILEPATH = sys.argv[1]
+
+
+def main():
+    """
+    This script will generate a table of contents for a markdown file.
+    It will replace an existing TOC if one exists, or insert a new one if it does not.
+    """
+    full_file = []
+
+    # Regex pattern for headers
+    header_pattern = re.compile(r"^(#{1,3}) (.*)$")
+    headers = []
+
+    # TOC start and end line numbers
+    toc_start = None
+    toc_end = None
+
+    # Flag for code blocks
+    code_block = False
+
+    with open(FILEPATH, "r") as file:
+        for line_number, line in enumerate(file):
+            full_file.append(line)
+
+            # Skips code blocks
+            if line.startswith("```"):
+                code_block = not code_block
+                continue
+            elif code_block:
+                continue
+
+            # Skips TOC
+            if line.startswith("## Table of Contents"):
+                continue
+
+            # Finds headers
+            header_match = header_pattern.match(line)
+            if header_match:
+                headers.append(header_match.group(0))
+
+            # Finds TOC start and end line numbers
+            if line.startswith("<!-- TOC -->"):
+                toc_start = line_number
+            elif line.startswith("<!-- /TOC -->"):
+                toc_end = line_number
+
+    toc = generate_toc(headers)
+
+    # Replaces TOC
+    if toc_start is not None and toc_end is not None:
+        replace_toc(full_file, toc, toc_start, toc_end)
+
+    # Inserts TOC
+    else:
+        for line in toc:
+            print(line)
+
+
+def generate_toc(headers):
+    """
+    Generates a table of contents from a list of headers.
+    """
+    special_chars = string.punctuation.replace("-", "").replace("_", "")
+    toc = ["## Table of Contents\n"]
+
+    for heading in headers:
+        level = heading.count("#")
+        title = heading[level:].strip()
+        link = (
+            title.casefold()
+            .replace(" ", "-")
+            .translate(str.maketrans("", "", special_chars))
+        )
+        toc.append("  " * (level - 1) + f"1. [{title}](#{link})")
+
+    toc.insert(0, "<!-- TOC -->")
+    toc.append("<!-- /TOC -->")
+
+    return toc
+
+
+def replace_toc(full_file, toc, toc_start, toc_end):
+    """
+    Replaces the existing TOC with the new one.
+    """
+    with open(FILEPATH, "w") as file:
+        file.writelines(full_file[:toc_start])
+        for line in toc:
+            file.write(line + "\n")
+        file.writelines(full_file[toc_end + 1 :])
+
+
+if __name__ == "__main__":
+    main()
