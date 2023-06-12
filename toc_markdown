@@ -79,7 +79,7 @@ def generate_toc(headers):
             .replace(" ", "-")
             .translate(str.maketrans("", "", special_chars))
         )
-        toc.append("  " * (level - 1) + f"1. [{title}](#{link})")
+        toc.append("    " * (level - 1) + f"1. [{title}](#{link})")
 
     toc.insert(0, "<!-- TOC -->")
     toc.append("<!-- /TOC -->")
