@@ -16,7 +16,7 @@ This Python script automates the generation and management of a Table of Content
 
 * Automatic generation of a table of contents for your Markdown files.
 * Updates an existing TOC or inserts a new one if not present.
-* Supports headers of levels 1 to 3.
+* Supports headers of levels 2 to 3.
 * Generates clickable links to the corresponding sections within the document.
 * Maintains the structure and formatting of the Markdown file.
 
@@ -24,7 +24,7 @@ This Python script automates the generation and management of a Table of Content
 
 ### Prerequisites
 
-* Python 3.x
+* Python 3.6
 
 ### Installation
 
