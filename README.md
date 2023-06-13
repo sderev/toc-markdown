@@ -29,25 +29,25 @@ This Python script automates the generation and management of a Table of Content
 ### Installation
 
 ```shell
-git clone https://github.com/your-username/markdown-toc-generator.git
+git clone https://github.com/sderev/toc-markdown.git
 ```
 
 ### Integration with Vim
 
-To streamline the process of updating the TOC in your Markdown files, ensure that the `toc_markdown` script is either accessible from your PATH or provide its absolute path in the Vim configuration.
+To streamline the process of updating the TOC in your Markdown files, ensure that the `toc-markdown` script is either accessible from your PATH or provide its absolute path in the Vim configuration.
 
-* Add the directory containing the `toc_markdown` script to your PATH environment variable. This step allows Vim to execute the script directly.
+* Add the directory containing the `toc-markdown` script to your PATH environment variable. This step allows Vim to execute the script directly.
 
    **OR**
 
-* If the `toc_markdown` script is not in the PATH, provide its absolute path in the Vim configuration. Open your `.vimrc` file and add the following line:
+* If the `toc-markdown` script is not in the PATH, provide its absolute path in the Vim configuration. Open your `.vimrc` file and add the following line:
 
    ```vim
-   autocmd FileType markdown nnoremap <buffer> <leader>t :w<cr>:.!toc_markdown %:p<cr>
+   autocmd FileType markdown nnoremap <buffer> <leader>t :w<cr>:.!toc-markdown %:p<cr>
    ```
 
-   Replace `path/to/toc_markdown` with the actual absolute path to the `toc_markdown` script on your system.
+   Replace `path/to/toc-markdown` with the actual absolute path to the `toc-markdown` script on your system.
 
-With the above configuration, you can press `<leader>t` while in normal mode within a Markdown file in Vim. It will save the file, execute the `toc_markdown` script on it, and reload the updated file, displaying the updated TOC.
+With the above configuration, you can press `<leader>t` while in normal mode within a Markdown file in Vim. It will save the file, execute the `toc-markdown` script on it, and reload the updated file, displaying the updated TOC.
 
-Make sure you have the `toc_markdown` script accessible from your PATH or provide its absolute path correctly for this integration to work.
+Make sure you have the `toc-markdown` script accessible from your PATH or provide its absolute path correctly for this integration to work.
