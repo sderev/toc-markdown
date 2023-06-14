@@ -8,7 +8,7 @@ import argparse
 def generate_and_insert_toc(filepath):
     """
     This script generates a table of contents for a markdown file.
-    If an existing TOC is present, it replaces it, otherwise, it inserts a new one.
+    If an existing TOC is present, it updates it, otherwise, it inserts a new one.
     
     Args:
         filepath (str): The path to the markdown file.
@@ -51,9 +51,9 @@ def generate_and_insert_toc(filepath):
     
         toc = generate_toc(headers)
     
-        # Replaces TOC
+        # Updates TOC
         if toc_start is not None and toc_end is not None:
-            replace_toc(full_file, toc, toc_start, toc_end, filepath)
+            update_toc(full_file, toc, toc_start, toc_end, filepath)
     
         # Inserts TOC
         else:
@@ -94,9 +94,9 @@ def generate_toc(headers):
     return toc
 
 
-def replace_toc(full_file, toc, toc_start, toc_end, filepath):
+def update_toc(full_file, toc, toc_start, toc_end, filepath):
     """
-    Replaces the existing TOC with the new one.
+    Updates the existing TOC with the new one.
     
     Args:
         full_file (list): A list of all lines in the file.
