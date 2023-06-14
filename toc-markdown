@@ -1,23 +1,27 @@
 #! /usr/bin/python3
 
-import string
-import re
 import argparse
+from pathlib import Path
+import re
+import string
+import unicodedata
+
+
+# This pattern matches 2nd and 3rd level headers,
+# but ignores 1st level headers.
+HEADER_PATTERN = re.compile(r"^(#{2,3}) (.*)$")
 
 
 def generate_and_insert_toc(filepath):
     """
     This script generates a table of contents for a markdown file.
     If an existing TOC is present, it updates it, otherwise, it inserts a new one.
-    
+
     Args:
         filepath (str): The path to the markdown file.
     """
     full_file = []  # Store all lines of the file
     headers = []  # Store all headers found in the file
-
-    # Regex pattern for headers
-    header_pattern = re.compile(r"^(#{2,3}) (.*)$")
 
     # TOC start and end line numbers
     toc_start = None
@@ -30,31 +34,31 @@ def generate_and_insert_toc(filepath):
         with open(filepath, "r") as file:
             for line_number, line in enumerate(file):
                 full_file.append(line)
-    
+
                 if line.startswith("```"):
                     # Flipping the boolean to track if we're in a code block
                     is_in_code_block = not is_in_code_block
                     continue
                 elif is_in_code_block or line.startswith("## Table of Contents"):
                     continue
-    
+
                 # Finds headers
-                header_match = header_pattern.match(line)
+                header_match = HEADER_PATTERN.match(line)
                 if header_match:
                     headers.append(header_match.group(0))
-    
+
                 # Finds TOC start and end line numbers
                 if line.startswith("<!-- TOC -->"):
                     toc_start = line_number
                 elif line.startswith("<!-- /TOC -->"):
                     toc_end = line_number
-    
+
         toc = generate_toc(headers)
-    
+
         # Updates TOC
         if toc_start is not None and toc_end is not None:
             update_toc(full_file, toc, toc_start, toc_end, filepath)
-    
+
         # Inserts TOC
         else:
             for line in toc:
@@ -68,7 +72,7 @@ def generate_and_insert_toc(filepath):
 def generate_toc(headers):
     """
     Generates a table of contents from a list of headers.
-    
+
     Args:
         headers (list): A list of markdown headers.
 
@@ -81,10 +85,12 @@ def generate_toc(headers):
     for heading in headers:
         level = heading.count("#")
         title = heading[level:].strip()
+        link = title.casefold().translate(str.maketrans("", "", special_chars)).strip()
+        link = re.sub("\s+", "-", link)
         link = (
-            title.casefold()
-            .replace(" ", "-")
-            .translate(str.maketrans("", "", special_chars))
+            unicodedata.normalize("NFKD", link)
+            .encode("ascii", "ignore")
+            .decode("utf-8", "ignore")
         )
         toc.append("    " * (level - 2) + f"1. [{title}](#{link})")
 
@@ -97,7 +103,7 @@ def generate_toc(headers):
 def update_toc(full_file, toc, toc_start, toc_end, filepath):
     """
     Updates the existing TOC with the new one.
-    
+
     Args:
         full_file (list): A list of all lines in the file.
         toc (list): A list of lines that make up the TOC.
@@ -115,10 +121,41 @@ def update_toc(full_file, toc, toc_start, toc_end, filepath):
         print(f"An error occurred while writing to the file: {e}")
 
 
+def is_valid_file(parser, arg):
+    """
+    Validates the file path argument.
+
+    Args:
+        parser: Instance of argparse.ArgumentParser for error messages.
+        arg (str): File path to be validated.
+
+    Returns:
+        str: Valid file path if it exists, is a file, and is a Markdown file.
+
+    Raises:
+        ArgumentTypeError: If any of the conditions are not met.
+    """
+    file_path = Path(arg)
+    if not file_path.exists():
+        parser.error(f"The file {arg} does not exist!")
+    elif not file_path.is_file():
+        parser.error(f"{arg} is not a file!")
+    elif file_path.suffix.lower() not in [".md", ".markdown"]:
+        parser.error(f"{arg} is not a Markdown file!")
+    else:
+        return arg
+
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Generate a table of contents for a markdown file.")
-    parser.add_argument('filepath', help='The path to the markdown file.')
+    parser = argparse.ArgumentParser(
+        description="Generate a table of contents for a markdown file."
+    )
+    parser.add_argument(
+        "filepath",
+        help="The path to the markdown file.",
+        type=lambda x: is_valid_file(parser, x),
+    )
     args = parser.parse_args()
-    
+
     generate_and_insert_toc(args.filepath)
 
