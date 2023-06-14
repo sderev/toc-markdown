@@ -35,7 +35,7 @@ def main():
 
 def generate_and_insert_toc(filepath):
     """
-    This script generates a table of contents for a markdown file.
+    Generates a table of contents for a markdown file.
     If an existing TOC is present, it updates it, otherwise, it inserts a new one.
 
     Args:
