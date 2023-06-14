@@ -9,7 +9,7 @@ This Python script automates the generation and management of a Table of Content
 1. [Getting Started](#getting-started)
     1. [Prerequisites](#prerequisites)
     1. [Installation](#installation)
-    1. [Integration with Vim](#integration-with-vim)
+1. [Integration with Vim](#integration-with-vim)
 <!-- /TOC -->
 
 ## Features
@@ -32,7 +32,7 @@ This Python script automates the generation and management of a Table of Content
 git clone https://github.com/sderev/toc-markdown.git
 ```
 
-### Integration with Vim
+## Integration with Vim
 
 To streamline the process of updating the TOC in your Markdown files, ensure that the `toc-markdown` script is either accessible from your PATH or provide its absolute path in the Vim configuration.
 
