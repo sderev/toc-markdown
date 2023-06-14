@@ -12,6 +12,27 @@ import unicodedata
 HEADER_PATTERN = re.compile(r"^(#{2,3}) (.*)$")
 
 
+def main():
+    """
+    Entry point of the script.
+
+    Parses command-line arguments and generates or updates the table of contents
+    for the specified Markdown file.
+    """
+
+    parser = argparse.ArgumentParser(
+        description="Generate a table of contents for a markdown file."
+    )
+    parser.add_argument(
+        "filepath",
+        help="The path to the markdown file.",
+        type=lambda x: is_valid_file(parser, x),
+    )
+    args = parser.parse_args()
+
+    generate_and_insert_toc(args.filepath)
+
+
 def generate_and_insert_toc(filepath):
     """
     This script generates a table of contents for a markdown file.
@@ -147,15 +168,4 @@ def is_valid_file(parser, arg):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Generate a table of contents for a markdown file."
-    )
-    parser.add_argument(
-        "filepath",
-        help="The path to the markdown file.",
-        type=lambda x: is_valid_file(parser, x),
-    )
-    args = parser.parse_args()
-
-    generate_and_insert_toc(args.filepath)
-
+    main()
