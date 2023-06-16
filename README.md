@@ -42,11 +42,13 @@ To streamline the process of updating the TOC in your Markdown files, ensure tha
 
    **OR**
 
-* If the `toc-markdown` script is not in the PATH, provide its absolute path in the Vim configuration. Open your `.vimrc` file and add the following line:
+* If the `toc-markdown` script is not in the PATH, provide its absolute path in the Vim configuration below. 
 
-   ```vim
-   autocmd FileType markdown nnoremap <buffer> <leader>t :w<cr>:.!toc-markdown %:p<cr>
-   ```
+Then, open your `.vimrc` file and add the following line:
+
+```vim
+autocmd FileType markdown nnoremap <buffer> <leader>t :w<cr>:.!toc-markdown %:p<cr>
+```
 
 With the above configuration, you can press `<leader>t` while in normal mode within a Markdown file in Vim. It will save the file, execute the `toc-markdown` script on it, and reload the updated file, displaying the updated TOC.
 
