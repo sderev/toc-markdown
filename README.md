@@ -38,7 +38,7 @@ git clone https://github.com/sderev/toc-markdown.git
 
 To streamline the process of updating the TOC in your Markdown files, ensure that the `toc-markdown` script is either accessible from your PATH or provide its absolute path in the Vim configuration.
 
-* Add the directory containing the `toc-markdown` script to your PATH environment variable. This step allows Vim to execute the script directly.
+* Add the `toc-markdown` script to your PATH environment variable. This step allows Vim to execute the script directly.
 
    **OR**
 
