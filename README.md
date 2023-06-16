@@ -2,6 +2,8 @@
 
 This Python script automates the generation and management of a Table of Contents (TOC) for your Markdown files. It scans the Markdown file for headers and creates a TOC with clickable links to the respective sections. The script can update an existing TOC or insert a new one if none exists.
 
+![toc_markdown](https://github.com/sderev/toc-markdown/assets/24412384/63907604-3bb5-4d53-be0d-37794cde39f5)
+
 <!-- TOC -->
 ## Table of Contents
 
