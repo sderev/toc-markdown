@@ -19,7 +19,6 @@ def main():
     Parses command-line arguments and generates or updates the table of contents
     for the specified Markdown file.
     """
-
     parser = argparse.ArgumentParser(
         description="Generate a table of contents for a markdown file."
     )
@@ -158,11 +157,11 @@ def is_valid_file(parser, arg):
     """
     file_path = Path(arg)
     if not file_path.exists():
-        parser.error(f"The file {arg} does not exist!")
+        parser.error(f"The file {arg} does not exist.")
     elif not file_path.is_file():
-        parser.error(f"{arg} is not a file!")
+        parser.error(f"{arg} is not a file.")
     elif file_path.suffix.lower() not in [".md", ".markdown"]:
-        parser.error(f"{arg} is not a Markdown file!")
+        parser.error(f"{arg} is not a Markdown file.")
     else:
         return arg
 
