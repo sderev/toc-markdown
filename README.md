@@ -51,5 +51,3 @@ autocmd FileType markdown nnoremap <buffer> <leader>t :w<cr>:.!toc-markdown %:p<
 ```
 
 With the above configuration, you can press `<leader>t` while in normal mode within a Markdown file in Vim. It will save the file, execute the `toc-markdown` script on it, and reload the updated file, displaying the updated TOC.
-
-Make sure you have the `toc-markdown` script accessible from your PATH or provide its absolute path correctly for this integration to work.
