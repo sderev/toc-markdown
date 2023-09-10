@@ -58,7 +58,7 @@ def safe_read(filepath):
         NotADirectoryError,
     ) as error:
         click.echo(f"Error accessing {filepath}: {error}", err=True)
-        return None
+        sys.exit(1)
 
 
 def parse_file(filepath):
@@ -112,6 +112,24 @@ def parse_file(filepath):
     return full_file, headers, toc_line_start, toc_line_end
 
 
+def generate_link_from_title(title):
+    """
+    Generates a link anchor from a given title.
+
+    Args:
+        title (str): The title from which to generate the link.
+
+    Returns:
+        str: The generated link.
+    """
+    # Ignores hyphens and underscores
+    punctuation = string.punctuation.replace("-", "").replace("_", "")
+
+    link = title.casefold().translate(str.maketrans("", "", punctuation)).strip()
+    link = re.sub(r"\s+", "-", link)
+    return unicodedata.normalize("NFKD", link).encode("ascii", "ignore").decode("utf-8", "ignore")
+
+
 def generate_toc(headers):
     """
     Generates a table of contents from a list of headers.
@@ -122,19 +140,12 @@ def generate_toc(headers):
     Returns:
         list: A list of lines that make up the TOC.
     """
-    special_chars = string.punctuation.replace("-", "").replace("_", "")
     toc = ["## Table of Contents\n"]
 
     for heading in headers:
         level = heading.count("#")
         title = heading[level:].strip()
-        link = title.casefold().translate(str.maketrans("", "", special_chars)).strip()
-        link = re.sub(r"\s+", "-", link)
-        link = (
-            unicodedata.normalize("NFKD", link)
-            .encode("ascii", "ignore")
-            .decode("utf-8", "ignore")
-        )
+        link = generate_link_from_title(title)
         toc.append("    " * (level - 2) + f"1. [{title}](#{link})")
 
     toc.insert(0, "<!-- TOC -->")
