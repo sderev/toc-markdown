@@ -38,8 +38,7 @@ def cli(filepath):
         update_toc(full_file, toc, toc_line_start, toc_line_end, filepath)
     # Inserts TOC
     else:
-        for line in toc:
-            print(line)
+        print("\n".join(toc))
 
 
 def safe_read(filepath):
@@ -127,7 +126,11 @@ def generate_link_from_title(title):
 
     link = title.casefold().translate(str.maketrans("", "", punctuation)).strip()
     link = re.sub(r"\s+", "-", link)
-    return unicodedata.normalize("NFKD", link).encode("ascii", "ignore").decode("utf-8", "ignore")
+    return (
+        unicodedata.normalize("NFKD", link)
+        .encode("ascii", "ignore")
+        .decode("utf-8", "ignore")
+    )
 
 
 def generate_toc(headers):
