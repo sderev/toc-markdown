@@ -143,7 +143,7 @@ def generate_toc(headers):
     Returns:
         list: A list of lines that make up the TOC.
     """
-    toc = ["## Table of Contents\n"]
+    toc = ["<!-- TOC -->", "## Table of Contents\n"]
 
     for heading in headers:
         level = heading.count("#")
@@ -151,7 +151,6 @@ def generate_toc(headers):
         link = generate_link_from_title(title)
         toc.append("    " * (level - 2) + f"1. [{title}](#{link})")
 
-    toc.insert(0, "<!-- TOC -->")
     toc.append("<!-- /TOC -->")
 
     return toc
