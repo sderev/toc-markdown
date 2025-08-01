@@ -126,11 +126,7 @@ def generate_link_from_title(title):
 
     link = title.casefold().translate(str.maketrans("", "", punctuation)).strip()
     link = re.sub(r"\s+", "-", link)
-    return (
-        unicodedata.normalize("NFKD", link)
-        .encode("ascii", "ignore")
-        .decode("utf-8", "ignore")
-    )
+    return unicodedata.normalize("NFKD", link).encode("ascii", "ignore").decode("utf-8", "ignore")
 
 
 def generate_toc(headers):
