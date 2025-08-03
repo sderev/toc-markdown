@@ -6,6 +6,7 @@ If an existing TOC is present, it updates it; otherwise, it outputs it to stdout
 import os
 import re
 import string
+import tempfile
 import unicodedata
 from pathlib import Path
 from typing import TextIO
@@ -45,7 +46,7 @@ def cli(filepath: str):
 
     # Updates TOC
     if toc_start_line is not None and toc_end_line is not None:
-        update_toc(full_file, toc, toc_start_line, toc_end_line, filepath)
+        update_toc(full_file, filepath, toc, toc_start_line, toc_end_line)
     # Inserts TOC
     else:
         print("\n".join(toc))
@@ -168,22 +169,39 @@ def generate_toc(headers: list[str]) -> list[str]:
     return toc
 
 
-def update_toc(full_file, toc, toc_line_start, toc_line_end, filepath):
+def update_toc(
+    full_file: list[str], filepath: Path, toc: list[str], toc_start_line: int, toc_end_line: int
+):
     """
-    Updates the existing TOC with the new one.
+    Updates the table of contents in the specified Markdown file.
 
     Args:
-        full_file (list): A list of all lines in the file.
+        full_file (list): A list of lines in the file.
+        filepath (Path): The path to the markdown file.
         toc (list): A list of lines that make up the TOC.
-        toc_start (int): The line number where the TOC starts.
-        toc_end (int): The line number where the TOC ends.
-        filepath (str): The path to the file.
+        toc_start_line (int): The line number where the TOC starts.
+        toc_end_line (int): The line number where the TOC ends.
     """
-    with open(filepath, "w", encoding="UTF-8") as file:
-        file.writelines(full_file[:toc_line_start])
+    with tempfile.NamedTemporaryFile(
+        mode="w", encoding="UTF-8", delete=False, dir=filepath.parent
+    ) as tmp_file:
+        # Write the file up to the TOC start line
+        for line in full_file[:toc_start_line]:
+            tmp_file.write(line)
+
+        # Write the new TOC
         for line in toc:
-            file.write(line + "\n")
-        file.writelines(full_file[toc_line_end + 1 :])
+            tmp_file.write(line)
+
+        # Write the rest of the file after the TOC end line
+        tmp_file.writelines(full_file[toc_end_line + 1 :])
+
+        # Ensure the temporary file is flushed and synced
+        tmp_file.flush()
+        os.fsync(tmp_file.fileno())
+
+    # Replace the original file with the temporary file
+    os.replace(tmp_file.name, filepath)
 
 
 if __name__ == "__main__":
