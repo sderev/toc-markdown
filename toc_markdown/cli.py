@@ -3,9 +3,9 @@ Generates a table of contents for a markdown file.
 If an existing TOC is present, it updates it, otherwise, it inserts a new one.
 """
 
+import os
 import re
 import string
-import sys
 import unicodedata
 from pathlib import Path
 from typing import TextIO
@@ -33,9 +33,12 @@ def cli(filepath: str):
 
     Example: toc-markdown README.md
     """
-    if Path(filepath).suffix.lower() not in MARKDOWN_EXTENSIONS:
-        click.echo(f"Error: {filepath} is not a Markdown file.", err=True)
-        sys.exit(1)
+    filepath = Path(filepath).resolve()
+
+    if filepath.suffix.lower() not in MARKDOWN_EXTENSIONS:
+        error_message = f"{click.style(f'{filepath} is not a Markdown file.', fg='red')}\n"
+        error_message += f"Supported extensions are: {', '.join(MARKDOWN_EXTENSIONS)}"
+        raise click.BadParameter(error_message)
 
     full_file, headers, toc_start_line, toc_end_line = parse_file(filepath)
     toc = generate_toc(headers)
@@ -63,8 +66,8 @@ def safe_read(filepath: Path) -> TextIO:
         IsADirectoryError,
         NotADirectoryError,
     ) as error:
-        click.echo(f"Error accessing {filepath}: {error}", err=True)
-        sys.exit(1)
+        error_message = f"Error accessing {filepath}: {click.style(str(error), fg='red')}"
+        raise IOError(error_message) from error
 
 
 def parse_file(filepath: Path) -> tuple[list[str], list[str], int | None, int | None]:
