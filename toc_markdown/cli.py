@@ -1,6 +1,6 @@
 """
 Generates a table of contents for a markdown file.
-If an existing TOC is present, it updates it, otherwise, it inserts a new one.
+If an existing TOC is present, it updates it; otherwise, it outputs it to stdout.
 """
 
 import os
@@ -56,7 +56,10 @@ def safe_read(filepath: Path) -> TextIO:
     Opens a file and handles any errors.
 
     Args:
-        filepath (str): The path to the file.
+        filepath (Path): The path to the file.
+
+    Returns:
+        TextIO: A file object opened for reading.
     """
     try:
         return open(filepath, "r", encoding="UTF-8")
@@ -75,14 +78,14 @@ def parse_file(filepath: Path) -> tuple[list[str], list[str], int | None, int | 
     Parses the specified Markdown file.
 
     Args:
-        filepath (str): The path to the markdown file.
+        filepath (Path): The path to the markdown file.
 
     Returns:
         tuple: A tuple containing:
-            full_file (list): A list of all lines in the file.
-            headers (list): A list of all headers in the file.
-            toc_line_start (int): The line number where the TOC starts.
-            toc_line_end (int): The line number where the TOC ends.
+            - full_file: A list of lines in the file.
+            - headers: A list of headers found in the file.
+            - toc_start_line: The line number where the TOC starts, or None if not found.
+            - toc_end_line: The line number where the TOC ends, or None if not found.
     """
     full_file: list[str] = []
     headers: list[str] = []
@@ -129,7 +132,7 @@ def generate_slug(title: str) -> str:
         title (str): The title to generate a slug for.
 
     Returns:
-        str: The generated link.
+        str: The generated slug.
     """
     # Keep hyphens and underscores in the slug, but remove other punctuation
     punctuation = string.punctuation.replace("-", "").replace("_", "")
