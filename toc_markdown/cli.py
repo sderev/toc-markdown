@@ -49,7 +49,7 @@ def cli(filepath: str):
         update_toc(full_file, filepath, toc, toc_start_line, toc_end_line)
     # Inserts TOC
     else:
-        print("\n".join(toc))
+        print("".join(toc), end="")
 
 
 def safe_read(filepath: Path) -> TextIO:
@@ -156,15 +156,15 @@ def generate_toc(headers: list[str]) -> list[str]:
     Returns:
         list: A list of lines that make up the TOC.
     """
-    toc = [f"{TOC_START_MARKER}", "## Table of Contents\n"]
+    toc = [f"{TOC_START_MARKER}\n", "## Table of Contents\n\n"]
 
     for heading in headers:
         level = heading.count("#")
         title = heading[level:].strip()
         link = generate_slug(title)
-        toc.append("    " * (level - 2) + f"1. [{title}](#{link})")
+        toc.append("    " * (level - 2) + f"1. [{title}](#{link})" + "\n")
 
-    toc.append(f"{TOC_END_MARKER}")
+    toc.append(f"{TOC_END_MARKER}" + "\n")
 
     return toc
 
@@ -205,4 +205,4 @@ def update_toc(
 
 
 if __name__ == "__main__":
-    cli()  # pylint: disable=no-value-for-parameter
+    cli()
