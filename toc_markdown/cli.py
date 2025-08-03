@@ -14,6 +14,12 @@ import click
 # This pattern matches 2nd and 3rd level headers, but ignores 1st level headers.
 HEADER_PATTERN = re.compile(r"^(#{2,3}) (.*)$")
 
+TOC_START_MARKER = "<!-- TOC -->"
+TOC_END_MARKER = "<!-- /TOC -->"
+MARKDOWN_EXTENSIONS = (".md", ".markdown")
+CODE_FENCE = "```"
+TOC_HEADER = "## Table of Contents"
+
 
 @click.command()
 @click.version_option()
@@ -26,7 +32,7 @@ def cli(filepath):
 
     Example: toc-markdown README.md
     """
-    if Path(filepath).suffix.lower() not in [".md", ".markdown"]:
+    if Path(filepath).suffix.lower() not in MARKDOWN_EXTENSIONS:
         click.echo(f"Error: {filepath} is not a Markdown file.", err=True)
         sys.exit(1)
 
@@ -89,12 +95,12 @@ def parse_file(filepath):
             full_file.append(line)
 
             # Tracks if we're in a code block
-            if line.startswith("```"):
+            if line.startswith(CODE_FENCE):
                 is_in_code_block = not is_in_code_block
                 continue
 
             # Ignores code blocks and existing TOC
-            if is_in_code_block or line.startswith("## Table of Contents"):
+            if is_in_code_block or line.startswith(TOC_HEADER):
                 continue
 
             # Finds headers
@@ -103,10 +109,10 @@ def parse_file(filepath):
                 headers.append(header_match.group(0))
 
             # Finds TOC start and end line numbers
-            if line.startswith("<!-- TOC -->"):
-                toc_line_start = line_number
-            if line.startswith("<!-- /TOC -->"):
-                toc_line_end = line_number
+            if line.startswith(TOC_START_MARKER):
+                toc_start_line = line_number
+            if line.startswith(TOC_END_MARKER):
+                toc_end_line = line_number
 
     return full_file, headers, toc_line_start, toc_line_end
 
@@ -139,7 +145,7 @@ def generate_toc(headers):
     Returns:
         list: A list of lines that make up the TOC.
     """
-    toc = ["<!-- TOC -->", "## Table of Contents\n"]
+    toc = [f"{TOC_START_MARKER}", "## Table of Contents\n"]
 
     for heading in headers:
         level = heading.count("#")
@@ -147,7 +153,7 @@ def generate_toc(headers):
         link = generate_link_from_title(title)
         toc.append("    " * (level - 2) + f"1. [{title}](#{link})")
 
-    toc.append("<!-- /TOC -->")
+    toc.append(f"{TOC_END_MARKER}")
 
     return toc
 
