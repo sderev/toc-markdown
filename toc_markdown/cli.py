@@ -117,22 +117,25 @@ def parse_file(filepath):
     return full_file, headers, toc_line_start, toc_line_end
 
 
-def generate_link_from_title(title):
+def generate_slug(title: str) -> str:
     """
-    Generates a link anchor from a given title.
+    Generates a slug for a given title to be used as an anchor link in markdown.
 
     Args:
-        title (str): The title from which to generate the link.
+        title (str): The title to generate a slug for.
 
     Returns:
         str: The generated link.
     """
-    # Ignores hyphens and underscores
+    # Keep hyphens and underscores in the slug, but remove other punctuation
     punctuation = string.punctuation.replace("-", "").replace("_", "")
+    slug = title.casefold().translate(str.maketrans("", "", punctuation)).strip()
 
-    link = title.casefold().translate(str.maketrans("", "", punctuation)).strip()
-    link = re.sub(r"\s+", "-", link)
-    return unicodedata.normalize("NFKD", link).encode("ascii", "ignore").decode("utf-8", "ignore")
+    slug = re.sub(r"\s+", "-", slug)
+    slug = unicodedata.normalize("NFKD", slug).encode("ascii", "ignore").decode("utf-8", "ignore")
+    slug = slug.strip("-")
+
+    return slug if slug else "untitled"
 
 
 def generate_toc(headers):
@@ -150,7 +153,7 @@ def generate_toc(headers):
     for heading in headers:
         level = heading.count("#")
         title = heading[level:].strip()
-        link = generate_link_from_title(title)
+        link = generate_slug(title)
         toc.append("    " * (level - 2) + f"1. [{title}](#{link})")
 
     toc.append(f"{TOC_END_MARKER}")
