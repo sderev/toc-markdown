@@ -8,6 +8,7 @@ import string
 import sys
 import unicodedata
 from pathlib import Path
+from typing import TextIO
 
 import click
 
@@ -24,7 +25,7 @@ TOC_HEADER = "## Table of Contents"
 @click.command()
 @click.version_option()
 @click.argument("filepath", type=click.Path(exists=True, dir_okay=False))
-def cli(filepath):
+def cli(filepath: str):
     """
     Generates or updates the table of contents for the specified Markdown file.
 
@@ -36,18 +37,18 @@ def cli(filepath):
         click.echo(f"Error: {filepath} is not a Markdown file.", err=True)
         sys.exit(1)
 
-    full_file, headers, toc_line_start, toc_line_end = parse_file(filepath)
+    full_file, headers, toc_start_line, toc_end_line = parse_file(filepath)
     toc = generate_toc(headers)
 
     # Updates TOC
-    if toc_line_start is not None and toc_line_end is not None:
-        update_toc(full_file, toc, toc_line_start, toc_line_end, filepath)
+    if toc_start_line is not None and toc_end_line is not None:
+        update_toc(full_file, toc, toc_start_line, toc_end_line, filepath)
     # Inserts TOC
     else:
         print("\n".join(toc))
 
 
-def safe_read(filepath):
+def safe_read(filepath: Path) -> TextIO:
     """
     Opens a file and handles any errors.
 
@@ -66,7 +67,7 @@ def safe_read(filepath):
         sys.exit(1)
 
 
-def parse_file(filepath):
+def parse_file(filepath: Path) -> tuple[list[str], list[str], int | None, int | None]:
     """
     Parses the specified Markdown file.
 
@@ -80,12 +81,12 @@ def parse_file(filepath):
             toc_line_start (int): The line number where the TOC starts.
             toc_line_end (int): The line number where the TOC ends.
     """
-    full_file = []  # Stores all lines of the file
-    headers = []  # Stores all headers found in the file
+    full_file: list[str] = []
+    headers: list[str] = []
 
     # TOC start and end line numbers
-    toc_line_start = None
-    toc_line_end = None
+    toc_start_line: int | None = None
+    toc_end_line: int | None = None
 
     # Flag for code blocks
     is_in_code_block = False
@@ -114,7 +115,7 @@ def parse_file(filepath):
             if line.startswith(TOC_END_MARKER):
                 toc_end_line = line_number
 
-    return full_file, headers, toc_line_start, toc_line_end
+    return full_file, headers, toc_start_line, toc_end_line
 
 
 def generate_slug(title: str) -> str:
@@ -138,7 +139,7 @@ def generate_slug(title: str) -> str:
     return slug if slug else "untitled"
 
 
-def generate_toc(headers):
+def generate_toc(headers: list[str]) -> list[str]:
     """
     Generates a table of contents from a list of headers.
 
