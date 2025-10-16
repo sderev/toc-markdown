@@ -3,6 +3,8 @@ Generates a table of contents for a markdown file.
 If an existing TOC is present, it updates it; otherwise, it outputs it to stdout.
 """
 
+from __future__ import annotations
+
 import os
 import re
 import string
