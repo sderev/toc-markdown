@@ -22,10 +22,16 @@ This tool scans Markdown files to detect headers and subsequently creates a Tabl
 
 ## Installation
 
-To install, use `pip` or `pipx`:
+**Requirements**: Python 3.10+
+
+To install, use `uv` (recommended) or `pip`:
 
 ```shell
-pipx install toc-markdown
+# Using uv (recommended)
+uv tool install toc-markdown
+
+# Using pip
+pip install toc-markdown
 ```
 
 ## Integration with Vim
