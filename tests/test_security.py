@@ -206,6 +206,92 @@ def test_line_length_limit_ignores_existing_toc(cli_runner, tmp_path, monkeypatc
     assert result.exit_code == 0
 
 
+def test_toc_markers_in_code_blocks_dont_bypass_line_length(cli_runner, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    # CRITICAL SECURITY TEST: Fake TOC markers spanning code blocks create intervals
+    # in pre-computation, causing lines between them to bypass validation even if
+    # those lines are outside code blocks.
+    #
+    # Attack scenario:
+    # ```
+    # <!-- TOC -->    <- Line 1: Fake start marker inside code
+    # ```
+    # [LONG LINE]     <- Line 3: >10k chars, NOT in code block, should trigger error
+    # ```
+    # <!-- /TOC -->   <- Line 5: Fake end marker inside code
+    # ```
+    #
+    # Buggy behavior: Pre-computation creates interval (1, 5), marks line 3 as "in TOC",
+    # skips validation, CLI succeeds.
+    # Fixed behavior: Pre-computation ignores markers in code blocks, no interval created,
+    # line 3 triggers validation error, CLI fails.
+
+    target = _write(
+        tmp_path,
+        "fake_toc_attack.md",
+        """
+        ## Header 1
+        """,
+    )
+
+    # Create a >10k character line that should fail validation
+    long_line = "X" * 10_001
+
+    # Place fake markers in code blocks with long line between them
+    content = f"""## Header 1
+
+```
+<!-- TOC -->
+```
+{long_line}
+```
+<!-- /TOC -->
+```
+
+## Header 2
+"""
+    target.write_text(content, encoding="utf-8")
+
+    # Should FAIL with line length error (fixed code)
+    # Would succeed on buggy code (line incorrectly marked as "in TOC")
+    result = cli_runner.invoke(cli_module.cli, [str(target)])
+    assert result.exit_code != 0
+    assert "maximum allowed length" in str(result.exception)
+    assert "10000" in str(result.exception)
+
+
+def test_long_lines_in_code_blocks_with_fake_markers_allowed(cli_runner, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    # Complementary test: Long lines inside code blocks should be exempt from validation,
+    # even when fake TOC markers are present. This ensures the fix doesn't create false positives.
+    target = _write(
+        tmp_path,
+        "code_block_long_line.md",
+        """
+        ## Header 1
+        """,
+    )
+
+    # Create a >10k character line INSIDE a code block
+    long_line = "X" * 20_000
+
+    content = f"""## Header 1
+
+```
+<!-- TOC -->
+{long_line}
+<!-- /TOC -->
+```
+
+## Header 2
+"""
+    target.write_text(content, encoding="utf-8")
+
+    # Should succeed - lines inside code blocks are always exempt
+    result = cli_runner.invoke(cli_module.cli, [str(target)])
+    assert result.exit_code == 0
+
+
 def test_header_count_limit_enforced(cli_runner, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     # Create a file with more than MAX_HEADERS (10,000) headers

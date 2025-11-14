@@ -183,3 +183,49 @@ def test_parse_file_handles_empty_file(tmp_path: Path):
     assert headers == []
     assert toc_start is None
     assert toc_end is None
+
+
+def test_toc_markers_in_fenced_code_block_ignored(tmp_path: Path):
+    """TOC markers inside fenced code blocks should not be detected."""
+    target = _write_markdown(
+        tmp_path,
+        f"""
+        ## Heading 1
+        {CODE_FENCE}
+        {TOC_START_MARKER}
+        Fake TOC content
+        {TOC_END_MARKER}
+        {CODE_FENCE}
+        ## Heading 2
+        """,
+    )
+
+    _, headers, toc_start, toc_end = parse_file(target, DEFAULT_MAX_LINE_LENGTH)
+    assert headers == ["## Heading 1", "## Heading 2"]
+    assert toc_start is None
+    assert toc_end is None
+
+
+def test_mixed_real_and_fake_toc_markers(tmp_path: Path):
+    """Real TOC outside code blocks, fake TOC inside should only detect real one."""
+    target = _write_markdown(
+        tmp_path,
+        f"""
+        {TOC_START_MARKER}
+        Real TOC
+        {TOC_END_MARKER}
+        ## Heading 1
+        {CODE_FENCE}
+        {TOC_START_MARKER}
+        Fake TOC
+        {TOC_END_MARKER}
+        {CODE_FENCE}
+        ## Heading 2
+        """,
+    )
+
+    _, headers, toc_start, toc_end = parse_file(target, DEFAULT_MAX_LINE_LENGTH)
+    assert headers == ["## Heading 1", "## Heading 2"]
+    # Only the real TOC should be detected
+    assert toc_start == 0
+    assert toc_end == 2

@@ -325,9 +325,40 @@ def parse_file(
         raise IOError(error_message) from error
 
     # Pre-compute TOC coverage so we only skip validated sections.
+    # IMPORTANT: Must track code blocks to avoid detecting markers inside them.
     toc_stack: list[int] = []
     toc_intervals: list[tuple[int, int]] = []
+    precomp_fence_char: str | None = None
+    precomp_fence_length = 0
+    precomp_fence_indent_columns = 0
+
     for line_number, line in enumerate(full_file):
+        # Check if we're inside a fenced code block
+        if precomp_fence_char is not None:
+            # Try to close the fence
+            indent_columns = _leading_whitespace_columns(line)
+            stripped_line = line.lstrip(" \t")
+            if stripped_line and stripped_line[0] == precomp_fence_char:
+                fence_run_length = len(stripped_line) - len(stripped_line.lstrip(precomp_fence_char))
+                if fence_run_length >= precomp_fence_length and stripped_line[fence_run_length:].strip() == "":
+                    additional_indent = indent_columns - precomp_fence_indent_columns
+                    if additional_indent <= CLOSING_FENCE_MAX_INDENT:
+                        precomp_fence_char = None
+                        precomp_fence_length = 0
+                        precomp_fence_indent_columns = 0
+            continue
+
+        # Check if this line opens a fenced code block
+        fence_match = CODE_FENCE_PATTERN.match(line)
+        if fence_match:
+            fence_sequence = fence_match.group("fence")
+            precomp_fence_char = fence_sequence[0]
+            precomp_fence_length = len(fence_sequence)
+            indent_prefix = fence_match.group("indent") or ""
+            precomp_fence_indent_columns = _leading_whitespace_columns(indent_prefix)
+            continue
+
+        # Only detect TOC markers outside code blocks
         if line.startswith(TOC_START_MARKER):
             toc_stack.append(line_number)
         if line.startswith(TOC_END_MARKER) and toc_stack:
