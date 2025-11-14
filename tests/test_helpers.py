@@ -10,6 +10,7 @@ from toc_markdown.cli import (
     collect_file_stat,
     contains_symlink,
     get_max_file_size,
+    get_max_line_length,
     normalize_filepath,
     safe_read,
 )
@@ -25,6 +26,18 @@ def test_get_max_file_size_rejects_non_positive(monkeypatch):
     monkeypatch.setenv("TOC_MARKDOWN_MAX_FILE_SIZE", "0")
     with pytest.raises(click.ClickException):
         get_max_file_size()
+
+
+def test_get_max_line_length_rejects_non_integer(monkeypatch):
+    monkeypatch.setenv("TOC_MARKDOWN_MAX_LINE_LENGTH", "invalid")
+    with pytest.raises(click.ClickException):
+        get_max_line_length()
+
+
+def test_get_max_line_length_rejects_non_positive(monkeypatch):
+    monkeypatch.setenv("TOC_MARKDOWN_MAX_LINE_LENGTH", "0")
+    with pytest.raises(click.ClickException):
+        get_max_line_length()
 
 
 def test_normalize_filepath_missing_file(tmp_path: Path):

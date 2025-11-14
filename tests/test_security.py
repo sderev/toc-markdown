@@ -68,6 +68,180 @@ def test_file_size_limit_enforced(cli_runner, tmp_path, monkeypatch):
     assert "maximum allowed size" in str(result.exception)
 
 
+def test_line_length_limit_enforced(cli_runner, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    # Create a file with a line exceeding MAX_LINE_LENGTH (10,000 characters)
+    target = _write(
+        tmp_path,
+        "long_line.md",
+        """
+        ## Heading
+        """,
+    )
+    # Create content with a line that's 10,001 characters long
+    long_line = "X" * 10_001
+    target.write_text(f"## Valid Heading\n{long_line}\n## Another Heading\n", encoding="utf-8")
+
+    result = cli_runner.invoke(cli_module.cli, [str(target)])
+    assert result.exit_code != 0
+    assert "maximum allowed length" in str(result.exception)
+    assert "10000" in str(result.exception)
+
+
+def test_line_length_within_limit_allowed(cli_runner, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    # Create a file with a line at exactly MAX_LINE_LENGTH (10,000 characters)
+    target = _write(
+        tmp_path,
+        "max_line.md",
+        """
+        ## Heading
+        """,
+    )
+    # Create content with a line that's exactly 10,000 characters (should pass)
+    max_line = "X" * 10_000
+    target.write_text(f"## Valid Heading\n{max_line}\n## Another Heading\n", encoding="utf-8")
+
+    result = cli_runner.invoke(cli_module.cli, [str(target)])
+    assert result.exit_code == 0
+
+
+
+def test_line_length_limit_enforced_without_toc_end(cli_runner, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    target = _write(
+        tmp_path,
+        "unclosed_toc.md",
+        """
+        ## Header 1
+        """,
+    )
+    long_line = "X" * 20_000
+    content = f"""## Header 1
+
+<!-- TOC -->
+## Table of Contents
+
+{long_line}
+
+## Header 2
+"""
+    target.write_text(content, encoding="utf-8")
+
+    result = cli_runner.invoke(cli_module.cli, [str(target)])
+    assert result.exit_code != 0
+    assert "maximum allowed length" in str(result.exception)
+
+
+def test_line_length_limit_ignores_code_blocks(cli_runner, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    # Lines inside code blocks should NOT be subject to line length limit
+    target = _write(
+        tmp_path,
+        "code_block_long_line.md",
+        """
+        ## Valid Header
+        """,
+    )
+    # Create a file with a very long line (20,000 chars) inside a code block
+    long_line = "X" * 20_000
+    content = f"## Header\n\n```python\n{long_line}\n```\n\n## Another Header\n"
+    target.write_text(content, encoding="utf-8")
+
+    result = cli_runner.invoke(cli_module.cli, [str(target)])
+    # Should succeed because the long line is inside a code block
+    assert result.exit_code == 0
+
+
+def test_line_length_limit_configurable(cli_runner, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    # Test that the line length limit can be configured via environment variable
+    monkeypatch.setenv("TOC_MARKDOWN_MAX_LINE_LENGTH", "50")
+    target = _write(
+        tmp_path,
+        "custom_limit.md",
+        """
+        ## Heading
+        """,
+    )
+    # Create a line with 51 characters (exceeds custom limit of 50)
+    long_line = "X" * 51
+    target.write_text(f"## Header\n{long_line}\n", encoding="utf-8")
+
+    result = cli_runner.invoke(cli_module.cli, [str(target)])
+    assert result.exit_code != 0
+    assert "maximum allowed length" in str(result.exception)
+    assert "50" in str(result.exception)
+
+
+def test_line_length_limit_ignores_existing_toc(cli_runner, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    # A malicious TOC with a very long line should not block TOC updates
+    target = _write(
+        tmp_path,
+        "malicious_toc.md",
+        """
+        ## Header 1
+        """,
+    )
+    # Create a TOC with a 20,000 character line inside it
+    long_toc_line = "X" * 20_000
+    content = f"""## Header 1
+
+<!-- TOC -->
+## Table of Contents
+
+{long_toc_line}
+<!-- /TOC -->
+
+## Header 2
+## Header 3
+"""
+    target.write_text(content, encoding="utf-8")
+
+    # Should succeed - the tool should update/rewrite the TOC despite the malicious line
+    result = cli_runner.invoke(cli_module.cli, [str(target)])
+    assert result.exit_code == 0
+
+
+def test_header_count_limit_enforced(cli_runner, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    # Create a file with more than MAX_HEADERS (10,000) headers
+    target = _write(
+        tmp_path,
+        "many_headers.md",
+        """
+        # Initial content
+        """,
+    )
+    # Create content with 10,001 headers
+    many_headers = "## Header\n" * 10_001
+    target.write_text(many_headers, encoding="utf-8")
+
+    result = cli_runner.invoke(cli_module.cli, [str(target)])
+    assert result.exit_code != 0
+    assert "too many headers" in str(result.exception)
+    assert "10000" in str(result.exception)
+
+
+def test_header_count_within_limit_allowed(cli_runner, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    # Create a file with exactly MAX_HEADERS (10,000) headers
+    target = _write(
+        tmp_path,
+        "max_headers.md",
+        """
+        # Initial content
+        """,
+    )
+    # Create content with exactly 10,000 headers (should pass)
+    max_headers = "## Header\n" * 10_000
+    target.write_text(max_headers, encoding="utf-8")
+
+    result = cli_runner.invoke(cli_module.cli, [str(target)])
+    assert result.exit_code == 0
+
+
 def test_permissions_preserved_on_update(cli_runner, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     target = _write(
@@ -118,8 +292,8 @@ def test_race_condition_detection(cli_runner, tmp_path, monkeypatch):
 
     original_parse = cli_module.parse_file
 
-    def _parse_and_mutate(path: Path):
-        result = original_parse(path)
+    def _parse_and_mutate(path: Path, max_line_length: int):
+        result = original_parse(path, max_line_length)
         existing = path.read_text(encoding="utf-8")
         path.write_text(existing + "\n## Mutated\n", encoding="utf-8")
         return result

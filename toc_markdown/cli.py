@@ -28,7 +28,10 @@ CODE_FENCE = "```"
 TOC_HEADER = "## Table of Contents"
 MAX_FILE_SIZE_ENV_VAR = "TOC_MARKDOWN_MAX_FILE_SIZE"
 DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MiB
-MAX_TOC_SECTION_LINES = 10_000
+MAX_LINE_LENGTH_ENV_VAR = "TOC_MARKDOWN_MAX_LINE_LENGTH"
+DEFAULT_MAX_LINE_LENGTH = 10_000
+MAX_HEADERS = 10_000
+MAX_TOC_SECTION_LINES = MAX_HEADERS + 100  # allow slack for TOC metadata
 
 
 @click.command()
@@ -45,10 +48,11 @@ def cli(filepath: str):
     base_dir = Path.cwd().resolve()
     filepath = normalize_filepath(filepath, base_dir)
     max_file_size = get_max_file_size()
+    max_line_length = get_max_line_length()
     initial_stat = collect_file_stat(filepath)
     enforce_file_size(initial_stat, max_file_size, filepath)
 
-    full_file, headers, toc_start_line, toc_end_line = parse_file(filepath)
+    full_file, headers, toc_start_line, toc_end_line = parse_file(filepath, max_line_length)
     post_parse_stat = collect_file_stat(filepath)
     ensure_file_unchanged(initial_stat, post_parse_stat, filepath)
     toc = generate_toc(headers)
@@ -89,6 +93,35 @@ def get_max_file_size() -> int:
         raise click.ClickException(error_message)
 
     return max_size
+
+
+def get_max_line_length() -> int:
+    """
+    Returns the maximum line length allowed for processing.
+
+    The limit can be configured via the TOC_MARKDOWN_MAX_LINE_LENGTH environment variable.
+    """
+    env_value = os.environ.get(MAX_LINE_LENGTH_ENV_VAR)
+    if env_value is None:
+        return DEFAULT_MAX_LINE_LENGTH
+
+    try:
+        max_length = int(env_value)
+    except ValueError as error:
+        error_message = (
+            f"Invalid value for {MAX_LINE_LENGTH_ENV_VAR}: "
+            f"{click.style(env_value, fg='red')} (expected positive integer)"
+        )
+        raise click.ClickException(error_message) from error
+
+    if max_length <= 0:
+        error_message = (
+            f"{MAX_LINE_LENGTH_ENV_VAR} must be a positive integer, got "
+            f"{click.style(str(max_length), fg='red')}."
+        )
+        raise click.ClickException(error_message)
+
+    return max_length
 
 
 def normalize_filepath(raw_path: str, base_dir: Path) -> Path:
@@ -243,12 +276,36 @@ def _leading_whitespace_columns(line: str) -> int:
     return columns
 
 
-def parse_file(filepath: Path) -> tuple[list[str], list[str], int | None, int | None]:
+
+def _enforce_line_length(
+    line: str, line_number: int, filepath: Path, max_line_length: int
+) -> None:
+    """
+    Ensures a single line does not exceed the configured maximum length.
+    """
+    line_len = len(line)
+    if line.endswith("\n"):
+        line_len -= 1
+        if line_len > 0 and line[line_len - 1] == "\r":
+            line_len -= 1
+    if line_len > max_line_length:
+        error_message = (
+            f"{click.style(str(filepath), fg='red')} contains a line at line {line_number + 1} "
+            f"exceeding the maximum allowed length of {click.style(str(max_line_length), fg='red')} "
+            "characters."
+        )
+        raise IOError(error_message)
+
+
+def parse_file(
+    filepath: Path, max_line_length: int = DEFAULT_MAX_LINE_LENGTH
+) -> tuple[list[str], list[str], int | None, int | None]:
     """
     Parses the specified Markdown file.
 
     Args:
         filepath (Path): The path to the markdown file.
+        max_line_length (int): Maximum allowed line length (excluding line endings).
 
     Returns:
         tuple: A tuple containing:
@@ -258,9 +315,37 @@ def parse_file(filepath: Path) -> tuple[list[str], list[str], int | None, int | 
             - toc_end_line: The line number where the TOC ends, or None if not found.
     """
     full_file: list[str] = []
-    headers: list[str] = []
 
-    # TOC start and end line numbers
+    try:
+        with safe_read(filepath) as file:
+            for line in file:
+                full_file.append(line)
+    except UnicodeDecodeError as error:
+        error_message = f"Invalid UTF-8 sequence in {filepath}: {click.style(str(error), fg='red')}"
+        raise IOError(error_message) from error
+
+    # Pre-compute TOC coverage so we only skip validated sections.
+    toc_stack: list[int] = []
+    toc_intervals: list[tuple[int, int]] = []
+    for line_number, line in enumerate(full_file):
+        if line.startswith(TOC_START_MARKER):
+            toc_stack.append(line_number)
+        if line.startswith(TOC_END_MARKER) and toc_stack:
+            start_index = toc_stack.pop()
+            toc_intervals.append((start_index, line_number))
+
+    toc_flags = [0] * (len(full_file) + 1)
+    for start_index, end_index in toc_intervals:
+        toc_flags[start_index + 1] += 1
+        toc_flags[end_index + 1] -= 1
+
+    is_line_in_toc: list[bool] = []
+    depth = 0
+    for idx in range(len(full_file)):
+        depth += toc_flags[idx]
+        is_line_in_toc.append(depth > 0)
+
+    headers: list[str] = []
     toc_start_line: int | None = None
     toc_end_line: int | None = None
 
@@ -270,73 +355,76 @@ def parse_file(filepath: Path) -> tuple[list[str], list[str], int | None, int | 
     code_fence_indent_columns = 0
     is_in_indented_code_block = False
 
-    try:
-        with safe_read(filepath) as file:
-            for line_number, line in enumerate(file):
-                full_file.append(line)
+    for line_number, line in enumerate(full_file):
+        # Tracks fenced code blocks (``` or ~~~, including info strings)
+        if code_fence_char is not None:
+            indent_columns = _leading_whitespace_columns(line)
+            stripped_line = line.lstrip(" 	")
+            if not stripped_line or stripped_line[0] != code_fence_char:
+                continue
 
-                # Tracks fenced code blocks (``` or ~~~, including info strings)
-                if code_fence_char is not None:
-                    indent_columns = _leading_whitespace_columns(line)
-                    stripped_line = line.lstrip(" 	")
-                    if not stripped_line or stripped_line[0] != code_fence_char:
-                        continue
+            fence_run_length = len(stripped_line) - len(stripped_line.lstrip(code_fence_char))
 
-                    fence_run_length = len(stripped_line) - len(stripped_line.lstrip(code_fence_char))
+            if fence_run_length >= code_fence_length and stripped_line[fence_run_length:].strip() == "":
+                additional_indent = indent_columns - code_fence_indent_columns
+                if additional_indent <= CLOSING_FENCE_MAX_INDENT:
+                    code_fence_char = None
+                    code_fence_length = 0
+                    code_fence_indent_columns = 0
 
-                    if fence_run_length >= code_fence_length and stripped_line[fence_run_length:].strip() == "":
-                        additional_indent = indent_columns - code_fence_indent_columns
-                        if additional_indent <= CLOSING_FENCE_MAX_INDENT:
-                            code_fence_char = None
-                            code_fence_length = 0
-                            code_fence_indent_columns = 0
+            continue
 
-                    continue
+        fence_match = CODE_FENCE_PATTERN.match(line)
+        if fence_match:
+            fence_sequence = fence_match.group("fence")
+            code_fence_char = fence_sequence[0]
+            code_fence_length = len(fence_sequence)
+            indent_prefix = fence_match.group("indent") or ""
+            code_fence_indent_columns = _leading_whitespace_columns(indent_prefix)
+            is_in_indented_code_block = False
+            continue
 
-                fence_match = CODE_FENCE_PATTERN.match(line)
-                if fence_match:
-                    fence_sequence = fence_match.group("fence")
-                    code_fence_char = fence_sequence[0]
-                    code_fence_length = len(fence_sequence)
-                    indent_prefix = fence_match.group("indent") or ""
-                    code_fence_indent_columns = _leading_whitespace_columns(indent_prefix)
-                    is_in_indented_code_block = False
-                    continue
+        # Tracks indented code blocks (any mix totaling 4+ columns)
+        leading_columns = _leading_whitespace_columns(line)
+        if leading_columns >= 4:
+            is_in_indented_code_block = True
+            continue
+        if is_in_indented_code_block:
+            if line.strip() == "":
+                continue
+            is_in_indented_code_block = False
 
-                # Tracks indented code blocks (any mix totaling 4+ columns)
-                leading_columns = _leading_whitespace_columns(line)
-                if leading_columns >= 4:
-                    is_in_indented_code_block = True
-                    continue
-                if is_in_indented_code_block:
-                    if line.strip() == "":
-                        continue
-                    is_in_indented_code_block = False
+        # Ignores code blocks and existing TOC header line
+        if (
+            code_fence_char is not None
+            or is_in_indented_code_block
+            or line.startswith(TOC_HEADER)
+        ):
+            continue
 
-                # Ignores code blocks and existing TOC
-                if (
-                    code_fence_char is not None
-                    or is_in_indented_code_block
-                    or line.startswith(TOC_HEADER)
-                ):
-                    continue
+        if not is_line_in_toc[line_number]:
+            _enforce_line_length(line, line_number, filepath, max_line_length)
 
-                # Finds headers
-                header_match = HEADER_PATTERN.match(line)
-                if header_match:
-                    headers.append(header_match.group(0))
+        # Finds headers
+        header_match = HEADER_PATTERN.match(line)
+        if header_match:
+            headers.append(header_match.group(0))
 
-                # Finds TOC start and end line numbers
-                if line.startswith(TOC_START_MARKER):
-                    toc_start_line = line_number
-                if line.startswith(TOC_END_MARKER):
-                    toc_end_line = line_number
-    except UnicodeDecodeError as error:
-        error_message = f"Invalid UTF-8 sequence in {filepath}: {click.style(str(error), fg='red')}"
-        raise IOError(error_message) from error
+            # Check header count limit
+            if len(headers) > MAX_HEADERS:
+                error_message = (
+                    f"{click.style(str(filepath), fg='red')} contains too many headers "
+                    f"(limit: {click.style(str(MAX_HEADERS), fg='red')})."
+                )
+                raise IOError(error_message)
+
+        # Finds TOC start and end line numbers
+        if line.startswith(TOC_START_MARKER):
+            toc_start_line = line_number
+        if line.startswith(TOC_END_MARKER):
+            toc_end_line = line_number
 
     return full_file, headers, toc_start_line, toc_end_line
-
 
 def generate_slug(title: str) -> str:
     """

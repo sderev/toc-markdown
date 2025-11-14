@@ -5,7 +5,13 @@ from pathlib import Path
 
 import pytest
 
-from toc_markdown.cli import CODE_FENCE, TOC_END_MARKER, TOC_START_MARKER, parse_file
+from toc_markdown.cli import (
+    CODE_FENCE,
+    DEFAULT_MAX_LINE_LENGTH,
+    TOC_END_MARKER,
+    TOC_START_MARKER,
+    parse_file,
+)
 
 
 def _write_markdown(tmp_path: Path, content: str) -> Path:
@@ -25,7 +31,7 @@ def test_parse_file_detects_only_h2_and_h3(tmp_path: Path):
         """,
     )
 
-    _, headers, _, _ = parse_file(target)
+    _, headers, _, _ = parse_file(target, DEFAULT_MAX_LINE_LENGTH)
     assert headers == ["## Heading 2", "### Heading 3"]
 
 
@@ -41,7 +47,7 @@ def test_parse_file_ignores_code_blocks(tmp_path: Path):
         """,
     )
 
-    _, headers, _, _ = parse_file(target)
+    _, headers, _, _ = parse_file(target, DEFAULT_MAX_LINE_LENGTH)
     assert headers == ["## Visible", "### Still Visible"]
 
 
@@ -57,7 +63,7 @@ def test_parse_file_handles_tilde_fences_with_info_strings(tmp_path: Path):
         """,
     )
 
-    _, headers, _, _ = parse_file(target)
+    _, headers, _, _ = parse_file(target, DEFAULT_MAX_LINE_LENGTH)
     assert headers == ["## Visible", "### After"]
 
 
@@ -77,7 +83,7 @@ def test_parse_file_does_not_close_fences_with_deep_indentation(tmp_path: Path):
         + "\n",
     )
 
-    _, headers, _, _ = parse_file(target)
+    _, headers, _, _ = parse_file(target, DEFAULT_MAX_LINE_LENGTH)
     assert headers == ["## After"]
 
 
@@ -96,7 +102,7 @@ def test_parse_file_ignores_short_fence_sequences(tmp_path: Path):
         + "\n",
     )
 
-    _, headers, _, _ = parse_file(target)
+    _, headers, _, _ = parse_file(target, DEFAULT_MAX_LINE_LENGTH)
     assert headers == ["## After"]
 
 
@@ -114,7 +120,7 @@ def test_parse_file_counts_mixed_whitespace_indents(tmp_path: Path, prefix: str)
         + "\n",
     )
 
-    _, headers, _, _ = parse_file(target)
+    _, headers, _, _ = parse_file(target, DEFAULT_MAX_LINE_LENGTH)
     assert headers == ["## Visible", "### After"]
 
 
@@ -130,7 +136,7 @@ def test_parse_file_closes_fences_inside_lists(tmp_path: Path):
         """,
     )
 
-    _, headers, _, _ = parse_file(target)
+    _, headers, _, _ = parse_file(target, DEFAULT_MAX_LINE_LENGTH)
     assert headers == ["## After"]
 
 
@@ -145,7 +151,7 @@ def test_parse_file_ignores_indented_code_blocks(tmp_path: Path):
         """,
     )
 
-    _, headers, _, _ = parse_file(target)
+    _, headers, _, _ = parse_file(target, DEFAULT_MAX_LINE_LENGTH)
     assert headers == ["## Visible", "### Another"]
 
 
@@ -162,7 +168,7 @@ def test_parse_file_tracks_toc_markers(tmp_path: Path):
         """,
     )
 
-    _, headers, toc_start, toc_end = parse_file(target)
+    _, headers, toc_start, toc_end = parse_file(target, DEFAULT_MAX_LINE_LENGTH)
     assert headers == ["## Heading"]
     assert toc_start == 0
     assert toc_end == 4
@@ -172,7 +178,7 @@ def test_parse_file_handles_empty_file(tmp_path: Path):
     target = tmp_path / "empty.md"
     target.write_text("", encoding="utf-8")
 
-    full_file, headers, toc_start, toc_end = parse_file(target)
+    full_file, headers, toc_start, toc_end = parse_file(target, DEFAULT_MAX_LINE_LENGTH)
     assert full_file == []
     assert headers == []
     assert toc_start is None
