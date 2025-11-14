@@ -3,8 +3,10 @@ from __future__ import annotations
 import os
 import stat
 import textwrap
+import time
 import uuid
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
@@ -263,6 +265,152 @@ def test_permissions_preserved_on_update(cli_runner, tmp_path, monkeypatch):
     result = cli_runner.invoke(cli_module.cli, [str(target)])
     assert result.exit_code == 0
     assert stat.S_IMODE(target.stat().st_mode) == desired_mode
+
+
+def test_atime_preserved_mtime_updated(cli_runner, tmp_path, monkeypatch):
+    """Verify atime is preserved but mtime reflects the actual modification."""
+    monkeypatch.chdir(tmp_path)
+    target = _write(
+        tmp_path,
+        "timestamps.md",
+        """
+        <!-- TOC -->
+        ## Table of Contents
+
+        1. Old entry
+        <!-- /TOC -->
+        ## Heading
+        ### Details
+        """,
+    )
+
+    # Set specific timestamps (use past times to avoid edge cases)
+    specific_atime = time.time() - 86400  # 1 day ago
+    specific_mtime = time.time() - 3600   # 1 hour ago
+    os.utime(target, times=(specific_atime, specific_mtime))
+
+    # Get original timestamps with nanosecond precision
+    original_stat = target.stat()
+    original_atime_ns = original_stat.st_atime_ns
+    original_mtime_ns = original_stat.st_mtime_ns
+
+    result = cli_runner.invoke(cli_module.cli, [str(target)])
+    assert result.exit_code == 0
+
+    # Verify atime is preserved but mtime has been updated
+    updated_stat = target.stat()
+    assert updated_stat.st_atime_ns == original_atime_ns
+    # mtime should be NEWER than original (file was actually modified)
+    assert updated_stat.st_mtime_ns > original_mtime_ns
+
+
+@pytest.mark.skipif(os.geteuid() != 0 if hasattr(os, "geteuid") else True, reason="Requires root privileges")
+def test_ownership_preserved_when_privileged(cli_runner, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    target = _write(
+        tmp_path,
+        "ownership.md",
+        """
+        <!-- TOC -->
+        ## Table of Contents
+
+        1. Old entry
+        <!-- /TOC -->
+        ## Heading
+        ### Details
+        """,
+    )
+
+    # Get current ownership
+    original_stat = target.stat()
+    original_uid = original_stat.st_uid
+    original_gid = original_stat.st_gid
+
+    result = cli_runner.invoke(cli_module.cli, [str(target)])
+    assert result.exit_code == 0
+
+    # Verify ownership is preserved
+    updated_stat = target.stat()
+    assert updated_stat.st_uid == original_uid
+    assert updated_stat.st_gid == original_gid
+
+
+@pytest.mark.skipif(not hasattr(os, "chown"), reason="Requires os.chown support")
+def test_ownership_fails_gracefully_when_unprivileged(cli_runner, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    target = _write(
+        tmp_path,
+        "ownership_unprivileged.md",
+        """
+        <!-- TOC -->
+        ## Table of Contents
+
+        1. Old entry
+        <!-- /TOC -->
+        ## Heading
+        ### Details
+        """,
+    )
+
+    # Mock os.chown to raise PermissionError
+    original_chown = os.chown
+    def mock_chown(*args, **kwargs):
+        raise PermissionError("Operation not permitted")
+
+    with mock.patch("os.chown", side_effect=mock_chown):
+        result = cli_runner.invoke(cli_module.cli, [str(target)])
+
+    # Should succeed despite chown failure
+    assert result.exit_code == 0
+
+    # Verify warning message was displayed
+    assert "Warning: Could not preserve file ownership" in result.output
+    assert "requires elevated privileges" in result.output
+
+    # Verify file was still updated (check TOC content changed)
+    content = target.read_text()
+    assert "Heading" in content
+    assert "Details" in content
+
+
+def test_ownership_skipped_when_unsupported(cli_runner, tmp_path, monkeypatch):
+    """Test that ownership preservation is skipped on platforms without st_uid/st_gid (e.g., Windows)."""
+    monkeypatch.chdir(tmp_path)
+    target = _write(
+        tmp_path,
+        "ownership_windows.md",
+        """
+        <!-- TOC -->
+        ## Table of Contents
+
+        1. Old entry
+        <!-- /TOC -->
+        ## Heading
+        ### Details
+        """,
+    )
+
+    # Mock stat_result to not have st_uid/st_gid attributes (Windows behavior)
+    original_stat = os.stat
+    def mock_stat(path):
+        result = original_stat(path)
+        # Create a new stat_result without st_uid and st_gid
+        # We'll mock getattr to return None for these attributes
+        return result
+
+    with mock.patch("toc_markdown.cli.getattr", side_effect=lambda obj, attr, default=None: None if attr in ("st_uid", "st_gid") else getattr(obj, attr, default)):
+        result = cli_runner.invoke(cli_module.cli, [str(target)])
+
+    # Should succeed and not attempt chown
+    assert result.exit_code == 0
+
+    # Should not display ownership warning (chown never attempted)
+    assert "Warning: Could not preserve file ownership" not in result.output
+
+    # Verify file was still updated
+    content = target.read_text()
+    assert "Heading" in content
+    assert "Details" in content
 
 
 def test_invalid_utf8_handling(cli_runner, tmp_path, monkeypatch):

@@ -60,7 +60,7 @@ def cli(filepath: str):
     # Updates TOC
     if toc_start_line is not None and toc_end_line is not None:
         validate_toc_markers(toc_start_line, toc_end_line)
-        update_toc(full_file, filepath, toc, toc_start_line, toc_end_line, post_parse_stat)
+        update_toc(full_file, filepath, toc, toc_start_line, toc_end_line, post_parse_stat, initial_stat)
     # Inserts TOC
     else:
         print("".join(toc), end="")
@@ -497,6 +497,7 @@ def update_toc(
     toc_start_line: int,
     toc_end_line: int,
     expected_stat: os.stat_result,
+    initial_stat: os.stat_result,
 ):
     """
     Updates the table of contents in the specified Markdown file.
@@ -507,11 +508,18 @@ def update_toc(
         toc (list): A list of lines that make up the TOC.
         toc_start_line (int): The line number where the TOC starts.
         toc_end_line (int): The line number where the TOC ends.
+        expected_stat (os.stat_result): The file stat after parsing (for race detection).
+        initial_stat (os.stat_result): The file stat before parsing (for atime preservation).
     """
     current_stat = collect_file_stat(filepath)
     ensure_file_unchanged(expected_stat, current_stat, filepath)
 
+    # Capture all metadata for preservation
     permissions = stat.S_IMODE(expected_stat.st_mode)
+    uid = getattr(expected_stat, "st_uid", None)
+    gid = getattr(expected_stat, "st_gid", None)
+    # Use atime from BEFORE the file was read to preserve original access time
+    atime_ns = initial_stat.st_atime_ns
 
     with tempfile.NamedTemporaryFile(
         mode="w", encoding="UTF-8", delete=False, dir=filepath.parent
@@ -532,8 +540,24 @@ def update_toc(
         os.fsync(tmp_file.fileno())
         os.chmod(tmp_file.name, permissions)
 
-    # Replace the original file with the temporary file
+        # Attempt to preserve ownership (requires privileges and platform support)
+        if uid is not None and gid is not None and hasattr(os, "chown"):
+            try:
+                os.chown(tmp_file.name, uid, gid)
+            except PermissionError:
+                click.echo(
+                    f"Warning: Could not preserve file ownership for {filepath.name} "
+                    "(requires elevated privileges)",
+                    err=True,
+                )
+
+    # Replace the original file with the temporary file (atomic operation)
     os.replace(tmp_file.name, filepath)
+
+    # Preserve access time (mtime intentionally NOT preserved to reflect actual modification)
+    # We read the new mtime from the replaced file and restore only the original atime
+    current_stat = filepath.stat()
+    os.utime(filepath, ns=(atime_ns, current_stat.st_mtime_ns))
 
 
 if __name__ == "__main__":
