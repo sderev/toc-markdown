@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import socket
 import stat
 import textwrap
 import time
@@ -537,3 +538,110 @@ def test_race_condition_detection(cli_runner, tmp_path, monkeypatch):
 
     assert result.exit_code != 0
     assert "changed during processing" in str(result.exception)
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="mkfifo not available")
+def test_fifo_rejected(cli_runner, tmp_path, monkeypatch):
+    """Test that FIFOs (named pipes) are rejected to prevent DoS via blocking reads."""
+    monkeypatch.chdir(tmp_path)
+    fifo_path = tmp_path / "malicious.md"
+
+    try:
+        os.mkfifo(fifo_path)
+    except OSError as error:  # pragma: no cover - platform dependent
+        pytest.skip(f"Unable to create FIFO: {error}")
+
+    result = cli_runner.invoke(cli_module.cli, [str(fifo_path)])
+    assert result.exit_code != 0
+    # The error could be either from is_file() check or collect_file_stat()
+    assert ("is not a regular file" in str(result.exception) or
+            "is not a regular file" in result.output)
+
+
+@pytest.mark.skipif(not hasattr(socket, "AF_UNIX"), reason="Unix sockets not available")
+def test_socket_rejected(cli_runner, tmp_path, monkeypatch):
+    """Test that Unix domain sockets are rejected."""
+    monkeypatch.chdir(tmp_path)
+    socket_path = tmp_path / "socket.md"
+
+    # Create a Unix domain socket
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        sock.bind(str(socket_path))
+    except OSError as error:  # pragma: no cover - platform dependent
+        pytest.skip(f"Unable to create socket: {error}")
+    finally:
+        sock.close()
+
+    result = cli_runner.invoke(cli_module.cli, [str(socket_path)])
+    assert result.exit_code != 0
+    assert ("is not a regular file" in str(result.exception) or
+            "is not a regular file" in result.output)
+
+
+def test_mocked_character_device_rejected(cli_runner, tmp_path, monkeypatch):
+    """Test character device rejection using mocked stat to ensure CI coverage."""
+    monkeypatch.chdir(tmp_path)
+    device_path = tmp_path / "device.md"
+    device_path.write_text("# Content\n", encoding="utf-8")
+
+    # Mock os.stat to return character device mode
+    original_stat = os.stat
+    def mock_stat(path, *args, **kwargs):
+        result = original_stat(path, *args, **kwargs)
+        if str(path) == str(device_path):
+            # Create a mock stat_result with S_IFCHR bit set
+            class MockStatResult:
+                st_mode = stat.S_IFCHR | 0o666
+                st_size = result.st_size
+                st_mtime = result.st_mtime
+                st_mtime_ns = result.st_mtime_ns
+                st_atime = result.st_atime
+                st_atime_ns = result.st_atime_ns
+                st_uid = result.st_uid if hasattr(result, 'st_uid') else 0
+                st_gid = result.st_gid if hasattr(result, 'st_gid') else 0
+                st_ino = result.st_ino if hasattr(result, 'st_ino') else 0
+                st_dev = result.st_dev if hasattr(result, 'st_dev') else 0
+            return MockStatResult()
+        return result
+
+    monkeypatch.setattr(os, "stat", mock_stat)
+
+    result = cli_runner.invoke(cli_module.cli, [str(device_path)])
+    assert result.exit_code != 0
+    assert ("is not a regular file" in str(result.exception) or
+            "is not a regular file" in result.output)
+
+
+def test_mocked_block_device_rejected(cli_runner, tmp_path, monkeypatch):
+    """Test block device rejection using mocked stat to ensure CI coverage."""
+    monkeypatch.chdir(tmp_path)
+    device_path = tmp_path / "block.md"
+    device_path.write_text("# Content\n", encoding="utf-8")
+
+    # Mock os.stat to return block device mode
+    original_stat = os.stat
+    def mock_stat(path, *args, **kwargs):
+        result = original_stat(path, *args, **kwargs)
+        if str(path) == str(device_path):
+            # Create a mock stat_result with S_IFBLK bit set
+            class MockStatResult:
+                st_mode = stat.S_IFBLK | 0o666
+                st_size = result.st_size
+                st_mtime = result.st_mtime
+                st_mtime_ns = result.st_mtime_ns
+                st_atime = result.st_atime
+                st_atime_ns = result.st_atime_ns
+                st_uid = result.st_uid if hasattr(result, 'st_uid') else 0
+                st_gid = result.st_gid if hasattr(result, 'st_gid') else 0
+                st_ino = result.st_ino if hasattr(result, 'st_ino') else 0
+                st_dev = result.st_dev if hasattr(result, 'st_dev') else 0
+            return MockStatResult()
+        return result
+
+    monkeypatch.setattr(os, "stat", mock_stat)
+
+    result = cli_runner.invoke(cli_module.cli, [str(device_path)])
+    assert result.exit_code != 0
+    assert ("is not a regular file" in str(result.exception) or
+            "is not a regular file" in result.output)
