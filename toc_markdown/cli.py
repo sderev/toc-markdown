@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 import re
+import stat
 import string
 import tempfile
 import unicodedata
@@ -23,6 +24,8 @@ TOC_END_MARKER = "<!-- /TOC -->"
 MARKDOWN_EXTENSIONS = (".md", ".markdown")
 CODE_FENCE = "```"
 TOC_HEADER = "## Table of Contents"
+MAX_FILE_SIZE_ENV_VAR = "TOC_MARKDOWN_MAX_FILE_SIZE"
+DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MiB
 
 
 @click.command()
@@ -36,22 +39,165 @@ def cli(filepath: str):
 
     Example: toc-markdown README.md
     """
-    filepath = Path(filepath).resolve()
-
-    if filepath.suffix.lower() not in MARKDOWN_EXTENSIONS:
-        error_message = f"{click.style(f'{filepath} is not a Markdown file.', fg='red')}\n"
-        error_message += f"Supported extensions are: {', '.join(MARKDOWN_EXTENSIONS)}"
-        raise click.BadParameter(error_message)
+    base_dir = Path.cwd().resolve()
+    filepath = normalize_filepath(filepath, base_dir)
+    max_file_size = get_max_file_size()
+    initial_stat = collect_file_stat(filepath)
+    enforce_file_size(initial_stat, max_file_size, filepath)
 
     full_file, headers, toc_start_line, toc_end_line = parse_file(filepath)
+    post_parse_stat = collect_file_stat(filepath)
+    ensure_file_unchanged(initial_stat, post_parse_stat, filepath)
     toc = generate_toc(headers)
 
     # Updates TOC
     if toc_start_line is not None and toc_end_line is not None:
-        update_toc(full_file, filepath, toc, toc_start_line, toc_end_line)
+        update_toc(full_file, filepath, toc, toc_start_line, toc_end_line, post_parse_stat)
     # Inserts TOC
     else:
         print("".join(toc), end="")
+
+
+def get_max_file_size() -> int:
+    """
+    Returns the maximum file size allowed for processing.
+
+    The limit can be configured via the TOC_MARKDOWN_MAX_FILE_SIZE environment variable.
+    """
+    env_value = os.environ.get(MAX_FILE_SIZE_ENV_VAR)
+    if env_value is None:
+        return DEFAULT_MAX_FILE_SIZE
+
+    try:
+        max_size = int(env_value)
+    except ValueError as error:
+        error_message = (
+            f"Invalid value for {MAX_FILE_SIZE_ENV_VAR}: "
+            f"{click.style(env_value, fg='red')} (expected positive integer)"
+        )
+        raise click.ClickException(error_message) from error
+
+    if max_size <= 0:
+        error_message = (
+            f"{MAX_FILE_SIZE_ENV_VAR} must be a positive integer, got "
+            f"{click.style(str(max_size), fg='red')}."
+        )
+        raise click.ClickException(error_message)
+
+    return max_size
+
+
+def normalize_filepath(raw_path: str, base_dir: Path) -> Path:
+    """
+    Validates and resolves a user-supplied filepath, ensuring that it is a markdown file
+    located under the working directory and not backed by a symlink.
+    """
+    path = Path(raw_path).expanduser()
+
+    if contains_symlink(path):
+        error_message = f"Symlinks are not supported for security reasons: {click.style(str(path), fg='red')}"
+        raise click.BadParameter(error_message)
+
+    try:
+        resolved = path.resolve(strict=True)
+    except FileNotFoundError as error:
+        error_message = f"{click.style(str(path), fg='red')} does not exist."
+        raise click.BadParameter(error_message) from error
+    except OSError as error:
+        error_message = f"Error resolving {click.style(str(path), fg='red')}: {click.style(str(error), fg='red')}"
+        raise click.BadParameter(error_message) from error
+
+    if not resolved.is_file():
+        error_message = f"{click.style(str(resolved), fg='red')} is not a regular file."
+        raise click.BadParameter(error_message)
+
+    try:
+        resolved.relative_to(base_dir)
+    except ValueError as error:
+        error_message = (
+            f"{click.style(str(resolved), fg='red')} is outside of the working directory "
+            f"{click.style(str(base_dir), fg='red')}."
+        )
+        raise click.BadParameter(error_message) from error
+
+    if resolved.suffix.lower() not in MARKDOWN_EXTENSIONS:
+        error_message = f"{click.style(f'{resolved} is not a Markdown file.', fg='red')}\n"
+        error_message += f"Supported extensions are: {', '.join(MARKDOWN_EXTENSIONS)}"
+        raise click.BadParameter(error_message)
+
+    return resolved
+
+
+def contains_symlink(path: Path) -> bool:
+    """
+    Returns True if the provided path or any of its parents is a symlink.
+    """
+    for candidate in (path, *path.parents):
+        try:
+            if candidate.is_symlink():
+                return True
+        except OSError:
+            continue
+    return False
+
+
+def collect_file_stat(filepath: Path) -> os.stat_result:
+    """
+    Returns the stat information of the specified file while ensuring it is a regular file.
+    """
+    try:
+        stat_result = os.stat(filepath, follow_symlinks=False)
+    except OSError as error:
+        error_message = f"Error accessing {filepath}: {click.style(str(error), fg='red')}"
+        raise IOError(error_message) from error
+
+    if stat.S_ISLNK(stat_result.st_mode):
+        error_message = f"Symlinks are not supported: {click.style(str(filepath), fg='red')}."
+        raise IOError(error_message)
+
+    if not stat.S_ISREG(stat_result.st_mode):
+        error_message = f"{click.style(str(filepath), fg='red')} is not a regular file."
+        raise IOError(error_message)
+
+    return stat_result
+
+
+def enforce_file_size(stat_result: os.stat_result, max_size: int, filepath: Path):
+    """
+    Ensures the file size does not exceed the configured maximum.
+    """
+    if stat_result.st_size > max_size:
+        error_message = (
+            f"{click.style(str(filepath), fg='red')} exceeds the maximum allowed size of "
+            f"{click.style(str(max_size), fg='red')} bytes."
+        )
+        raise IOError(error_message)
+
+
+def ensure_file_unchanged(
+    expected_stat: os.stat_result, current_stat: os.stat_result, filepath: Path
+):
+    """
+    Ensures that the file has not changed between operations to avoid race conditions.
+    """
+    fingerprint_before = (
+        getattr(expected_stat, "st_ino", None),
+        getattr(expected_stat, "st_dev", None),
+        expected_stat.st_size,
+        expected_stat.st_mtime_ns,
+    )
+    fingerprint_after = (
+        getattr(current_stat, "st_ino", None),
+        getattr(current_stat, "st_dev", None),
+        current_stat.st_size,
+        current_stat.st_mtime_ns,
+    )
+
+    if fingerprint_before != fingerprint_after:
+        error_message = (
+            f"{click.style(str(filepath), fg='red')} changed during processing; refusing to overwrite."
+        )
+        raise IOError(error_message)
 
 
 def safe_read(filepath: Path) -> TextIO:
@@ -100,29 +246,33 @@ def parse_file(filepath: Path) -> tuple[list[str], list[str], int | None, int | 
     # Flag for code blocks
     is_in_code_block = False
 
-    with safe_read(filepath) as file:
-        for line_number, line in enumerate(file):
-            full_file.append(line)
+    try:
+        with safe_read(filepath) as file:
+            for line_number, line in enumerate(file):
+                full_file.append(line)
 
-            # Tracks if we're in a code block
-            if line.startswith(CODE_FENCE):
-                is_in_code_block = not is_in_code_block
-                continue
+                # Tracks if we're in a code block
+                if line.startswith(CODE_FENCE):
+                    is_in_code_block = not is_in_code_block
+                    continue
 
-            # Ignores code blocks and existing TOC
-            if is_in_code_block or line.startswith(TOC_HEADER):
-                continue
+                # Ignores code blocks and existing TOC
+                if is_in_code_block or line.startswith(TOC_HEADER):
+                    continue
 
-            # Finds headers
-            header_match = HEADER_PATTERN.match(line)
-            if header_match:
-                headers.append(header_match.group(0))
+                # Finds headers
+                header_match = HEADER_PATTERN.match(line)
+                if header_match:
+                    headers.append(header_match.group(0))
 
-            # Finds TOC start and end line numbers
-            if line.startswith(TOC_START_MARKER):
-                toc_start_line = line_number
-            if line.startswith(TOC_END_MARKER):
-                toc_end_line = line_number
+                # Finds TOC start and end line numbers
+                if line.startswith(TOC_START_MARKER):
+                    toc_start_line = line_number
+                if line.startswith(TOC_END_MARKER):
+                    toc_end_line = line_number
+    except UnicodeDecodeError as error:
+        error_message = f"Invalid UTF-8 sequence in {filepath}: {click.style(str(error), fg='red')}"
+        raise IOError(error_message) from error
 
     return full_file, headers, toc_start_line, toc_end_line
 
@@ -143,6 +293,10 @@ def generate_slug(title: str) -> str:
 
     slug = re.sub(r"\s+", "-", slug)
     slug = unicodedata.normalize("NFKD", slug).encode("ascii", "ignore").decode("utf-8", "ignore")
+    slug = slug.casefold()
+    slug = slug.translate(str.maketrans("", "", punctuation))
+    slug = re.sub(r"\s+", "-", slug)
+    slug = re.sub(r"-{2,}", "-", slug)
     slug = slug.strip("-")
 
     return slug if slug else "untitled"
@@ -172,7 +326,12 @@ def generate_toc(headers: list[str]) -> list[str]:
 
 
 def update_toc(
-    full_file: list[str], filepath: Path, toc: list[str], toc_start_line: int, toc_end_line: int
+    full_file: list[str],
+    filepath: Path,
+    toc: list[str],
+    toc_start_line: int,
+    toc_end_line: int,
+    expected_stat: os.stat_result,
 ):
     """
     Updates the table of contents in the specified Markdown file.
@@ -184,6 +343,11 @@ def update_toc(
         toc_start_line (int): The line number where the TOC starts.
         toc_end_line (int): The line number where the TOC ends.
     """
+    current_stat = collect_file_stat(filepath)
+    ensure_file_unchanged(expected_stat, current_stat, filepath)
+
+    permissions = stat.S_IMODE(expected_stat.st_mode)
+
     with tempfile.NamedTemporaryFile(
         mode="w", encoding="UTF-8", delete=False, dir=filepath.parent
     ) as tmp_file:
@@ -198,9 +362,10 @@ def update_toc(
         # Write the rest of the file after the TOC end line
         tmp_file.writelines(full_file[toc_end_line + 1 :])
 
-        # Ensure the temporary file is flushed and synced
+        # Ensure the temporary file is flushed, synced, and has the original permissions
         tmp_file.flush()
         os.fsync(tmp_file.fileno())
+        os.chmod(tmp_file.name, permissions)
 
     # Replace the original file with the temporary file
     os.replace(tmp_file.name, filepath)

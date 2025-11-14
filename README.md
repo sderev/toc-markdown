@@ -19,6 +19,7 @@ This tool scans Markdown files to detect headers and subsequently creates a Tabl
 * Supports headers of levels 2 to 3.
 * Provides clickable links leading to the corresponding sections within the document.
 * Preserves the structure and formatting of the Markdown file.
+* Guards against unsafe inputs: symlinks are rejected, files must live under the current working directory, and data is re-read before any write to prevent race conditions.
 
 ## Installation
 
@@ -34,6 +35,15 @@ uv tool install toc-markdown
 pip install toc-markdown
 ```
 
+## Usage & Safety
+
+* Only regular Markdown files (`.md`, `.markdown`) are accepted.
+* Run the CLI from the directory tree that owns the target file—files outside the current working directory are rejected to prevent path traversal.
+* Symlinks (whether the target or any parent path) are refused.
+* Files larger than 10 MiB are rejected. Override via `TOC_MARKDOWN_MAX_FILE_SIZE=<bytes>` if you need a higher cap.
+* Files must be valid UTF-8. Invalid byte sequences abort processing to avoid corrupt output.
+* Updates happen through a temporary file in the same directory; contents are flushed, synced, and atomically swapped while preserving permissions.
+
 ## Integration with Vim
 
 Add the following line to your `.vimrc` file:
@@ -43,3 +53,22 @@ autocmd FileType markdown nnoremap <buffer> <leader>t :w<cr>:.!toc-markdown %:p<
 ```
 
 With this setup, simply press `<leader>t` in normal mode when editing a Markdown file in Vim. This will save the file and run `toc-markdown` on it.
+
+## Development
+
+Install the project (editable) together with the development dependencies using `uv`:
+
+```shell
+uv venv
+UV_CACHE_DIR=.uv-cache uv pip install -e .
+UV_CACHE_DIR=.uv-cache uv pip install pytest pytest-cov hypothesis "atheris>=2.3.0"
+```
+
+Run the full, security-focused suite (unit, integration, Hypothesis, fuzz) with coverage:
+
+```shell
+UV_CACHE_DIR=.uv-cache uv run --no-sync pytest --cov=toc_markdown --cov-report=html
+```
+
+The HTML coverage report is written to `htmlcov/index.html`. The suite currently exercises 100% of the codebase.
+

@@ -28,4 +28,16 @@ toc-markdown = "toc_markdown.cli:cli"
 dev = [
     "pytest>=8.0",
     "pytest-cov>=6.0",
+    "hypothesis>=6.0",
+    "atheris>=2.3.0",
+]
+
+[tool.coverage.run]
+source = ["toc_markdown"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
 ]
