@@ -26,6 +26,7 @@ CODE_FENCE = "```"
 TOC_HEADER = "## Table of Contents"
 MAX_FILE_SIZE_ENV_VAR = "TOC_MARKDOWN_MAX_FILE_SIZE"
 DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MiB
+MAX_TOC_SECTION_LINES = 10_000
 
 
 @click.command()
@@ -52,6 +53,7 @@ def cli(filepath: str):
 
     # Updates TOC
     if toc_start_line is not None and toc_end_line is not None:
+        validate_toc_markers(toc_start_line, toc_end_line)
         update_toc(full_file, filepath, toc, toc_start_line, toc_end_line, post_parse_stat)
     # Inserts TOC
     else:
@@ -323,6 +325,22 @@ def generate_toc(headers: list[str]) -> list[str]:
     toc.append(f"{TOC_END_MARKER}" + "\n")
 
     return toc
+
+
+def validate_toc_markers(toc_start_line: int, toc_end_line: int) -> None:
+    """Ensure TOC markers are sane before mutating the file."""
+
+    if toc_start_line >= toc_end_line:
+        raise click.BadParameter(
+            "Invalid TOC markers:\n"
+            f"  Start marker at line {toc_start_line + 1}\n"
+            f"  End marker at line {toc_end_line + 1}\n"
+            "Start marker must come before end marker."
+        )
+
+    toc_size = toc_end_line - toc_start_line
+    if toc_size > MAX_TOC_SECTION_LINES:
+        raise click.BadParameter(f"TOC section is suspiciously large ({toc_size} lines)")
 
 
 def update_toc(
