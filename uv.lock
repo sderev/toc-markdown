@@ -249,10 +249,12 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "atheris" },
     { name = "hypothesis" },
     { name = "pytest" },
     { name = "pytest-cov" },
+]
+fuzz = [
+    { name = "atheris", marker = "python_full_version < '3.12'" },
 ]
 
 [package.metadata]
@@ -260,11 +262,11 @@ requires-dist = [{ name = "click" }]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "atheris", specifier = ">=2.3.0" },
     { name = "hypothesis", specifier = ">=6.0" },
     { name = "pytest", specifier = ">=8.0" },
     { name = "pytest-cov", specifier = ">=6.0" },
 ]
+fuzz = [{ name = "atheris", marker = "python_full_version < '3.12'", specifier = ">=2.3.0" }]
 
 [[package]]
 name = "tomli"

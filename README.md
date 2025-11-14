@@ -60,15 +60,26 @@ Install the project (editable) together with the development dependencies using 
 
 ```shell
 uv venv
-UV_CACHE_DIR=.uv-cache uv pip install -e .
-UV_CACHE_DIR=.uv-cache uv pip install pytest pytest-cov hypothesis "atheris>=2.3.0"
+uv pip install -e ".[dev]"
 ```
 
-Run the full, security-focused suite (unit, integration, Hypothesis, fuzz) with coverage:
+Run the test suite (unit, integration, Hypothesis, security) with coverage:
 
 ```shell
-UV_CACHE_DIR=.uv-cache uv run --no-sync pytest --cov=toc_markdown --cov-report=html
+uv run pytest tests/ --cov=toc_markdown --cov-report=html
 ```
 
 The HTML coverage report is written to `htmlcov/index.html`. The suite currently exercises 100% of the codebase.
+
+### Fuzz Testing (Optional)
+
+Fuzz tests using atheris are available but only work on Python 3.10-3.11 (atheris 2.3.0 is incompatible with Python 3.12+):
+
+```shell
+# Install fuzz dependencies (Python 3.10-3.11 only)
+uv pip install -e ".[fuzz]"
+
+# Run all tests including fuzz tests
+uv run pytest tests/ --cov=toc_markdown
+```
 

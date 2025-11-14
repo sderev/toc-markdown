@@ -29,7 +29,12 @@ dev = [
     "pytest>=8.0",
     "pytest-cov>=6.0",
     "hypothesis>=6.0",
-    "atheris>=2.3.0",
+]
+
+# Fuzz testing with atheris (Python 3.10-3.11 only)
+# atheris 2.3.0 is incompatible with Python 3.12+ due to removed opcodes
+fuzz = [
+    "atheris>=2.3.0; python_version < '3.12'",
 ]
 
 [tool.coverage.run]
