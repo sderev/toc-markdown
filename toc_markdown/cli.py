@@ -19,6 +19,8 @@ import click
 # This pattern matches 2nd and 3rd level headers, but ignores 1st level headers.
 HEADER_PATTERN = re.compile(r"^(#{2,3}) (.*)$")
 CODE_FENCE_PATTERN = re.compile(r"^(?P<indent>\s{0,3})(?P<fence>`{3,}|~{3,})(?P<info>.*)$")
+MARKDOWN_LINK_PATTERN = re.compile(r"\[([^\]]*)\]\((?:[^()]|\([^)]*\))*\)")
+INLINE_CODE_PATTERN = re.compile(r"`[^`]+`")
 CLOSING_FENCE_MAX_INDENT = 3
 
 TOC_START_MARKER = "<!-- TOC -->"
@@ -457,6 +459,243 @@ def parse_file(
 
     return full_file, headers, toc_start_line, toc_end_line
 
+
+def is_escaped(text: str, pos: int) -> bool:
+    """
+    Check if a character at position pos is escaped by counting preceding backslashes.
+
+    A character is escaped if it's preceded by an odd number of backslashes.
+
+    Args:
+        text (str): The text to check.
+        pos (int): The position of the character to check.
+
+    Returns:
+        bool: True if the character is escaped, False otherwise.
+    """
+    if pos == 0:
+        return False
+
+    # Count consecutive backslashes before pos
+    backslash_count = 0
+    i = pos - 1
+    while i >= 0 and text[i] == "\\":
+        backslash_count += 1
+        i -= 1
+
+    # Odd number of backslashes means the character is escaped
+    return backslash_count % 2 == 1
+
+
+def find_inline_code_spans(text: str) -> list[tuple[int, int]]:
+    """
+    Find all inline code spans in text and return their (start, end) positions.
+
+    Follows CommonMark spec: inline code spans are delimited by backtick strings
+    of equal length. For example, `code`, ``code``, ```code```, etc.
+
+    Args:
+        text (str): The text to scan for inline code spans.
+
+    Returns:
+        list[tuple[int, int]]: List of (start, end) positions for each code span.
+    """
+    spans = []
+    i = 0
+
+    while i < len(text):
+        if text[i] == "`" and not is_escaped(text, i):
+            # Count opening backticks (non-escaped)
+            start = i
+            backtick_count = 0
+            while i < len(text) and text[i] == "`":
+                backtick_count += 1
+                i += 1
+
+            # Look for closing backticks of same length
+            while i < len(text):
+                if text[i] == "`" and not is_escaped(text, i):
+                    # Count closing backticks (non-escaped)
+                    close_start = i
+                    close_count = 0
+                    while i < len(text) and text[i] == "`":
+                        close_count += 1
+                        i += 1
+
+                    if close_count == backtick_count:
+                        # Found matching closing backticks
+                        spans.append((start, i))
+                        break
+                    # Otherwise, these backticks are part of content, continue searching
+                else:
+                    i += 1
+        else:
+            i += 1
+
+    return spans
+
+
+def strip_markdown_links(text: str) -> str:
+    r"""
+    Strips markdown link syntax from text, extracting only the link text.
+
+    Converts `[text](url)` to just `text`, while preserving links inside inline code.
+    Handles:
+    * Multi-backtick inline code (e.g., `` `code` ``)
+    * URLs with nested parentheses (e.g., `https://example.com/foo(bar(baz))`)
+    * Angle-bracketed URLs (e.g., `[text](<url(with)parens>)`)
+    * Reference-style links (e.g., `[text][ref]` or `![image][ref]`)
+    * Escaped image markers (e.g., `\![text](url)` preserved as-is)
+
+    Args:
+        text (str): The text potentially containing markdown links.
+
+    Returns:
+        str: The text with markdown link syntax removed.
+    """
+    # Find all inline code spans using state machine
+    code_spans = find_inline_code_spans(text)
+
+    # Preserve inline code by replacing with placeholders
+    inline_code_texts = []
+    offset = 0
+    text_parts = []
+
+    for start, end in code_spans:
+        # Add text before code span
+        text_parts.append(text[offset:start])
+        # Add placeholder for code span
+        inline_code_texts.append(text[start:end])
+        text_parts.append(f"\x00CODE_{len(inline_code_texts) - 1}\x00")
+        offset = end
+
+    # Add remaining text
+    text_parts.append(text[offset:])
+    text_with_placeholders = "".join(text_parts)
+
+    # Strip markdown links using state machine for balanced parentheses
+    result = []
+    i = 0
+
+    while i < len(text_with_placeholders):
+        # Look for '[' that starts a potential link or image
+        if text_with_placeholders[i] == "[" and not is_escaped(text_with_placeholders, i):
+            # Check if this is preceded by escaped !, which means the entire ![...](...) should be preserved
+            if i > 0 and text_with_placeholders[i - 1] == "!" and is_escaped(text_with_placeholders, i - 1):
+                # Skip this [ since the \! means the whole sequence should be literal
+                result.append(text_with_placeholders[i])
+                i += 1
+                continue
+
+            # Check if this is an image (preceded by non-escaped !)
+            is_image = i > 0 and text_with_placeholders[i - 1] == "!" and not is_escaped(text_with_placeholders, i - 1)
+            image_start = i - 1 if is_image else i
+
+            # Find the matching ']', handling nested brackets and escaped characters
+            j = i + 1
+            bracket_depth = 1  # We're inside one opening bracket
+            while j < len(text_with_placeholders) and bracket_depth > 0:
+                if text_with_placeholders[j] == "\\" and j + 1 < len(text_with_placeholders):
+                    # Skip escaped character (e.g., \] or \[)
+                    j += 2
+                elif text_with_placeholders[j] == "[":
+                    bracket_depth += 1
+                    j += 1
+                elif text_with_placeholders[j] == "]":
+                    bracket_depth -= 1
+                    j += 1
+                else:
+                    j += 1
+
+            if bracket_depth == 0 and j < len(text_with_placeholders):
+                # Found matching ']', check if followed by '(' or '['
+                # j is now pointing past the closing ']', so link text is from i+1 to j-1
+                link_text = text_with_placeholders[i + 1 : j - 1]
+                if j < len(text_with_placeholders) and text_with_placeholders[j] == "(":
+                    # Inline link: [text](url)
+                    # Find matching ')' with balanced counting, skipping escaped parens
+                    k = j + 1
+
+                    # Check for angle-bracketed URL: ](<...>)
+                    if k < len(text_with_placeholders) and text_with_placeholders[k] == "<":
+                        # Find matching '>' and skip parenthesis balancing
+                        k += 1
+                        while k < len(text_with_placeholders) and text_with_placeholders[k] != ">":
+                            if text_with_placeholders[k] == "\\" and k + 1 < len(text_with_placeholders):
+                                k += 2  # Skip escaped character
+                            else:
+                                k += 1
+                        if k < len(text_with_placeholders) and text_with_placeholders[k] == ">":
+                            k += 1  # Skip the '>'
+                            # Now look for the closing ')'
+                            while k < len(text_with_placeholders) and text_with_placeholders[k] in " \t":
+                                k += 1  # Skip optional whitespace
+                            if k < len(text_with_placeholders) and text_with_placeholders[k] == ")":
+                                k += 1  # Skip the ')'
+                                # Found complete link/image with angle-bracketed URL
+                                if is_image and result and result[-1] == "!":
+                                    result.pop()
+                                result.append(link_text)
+                                i = k
+                                continue
+                    else:
+                        # Regular URL without angle brackets
+                        paren_depth = 1
+                        while k < len(text_with_placeholders) and paren_depth > 0:
+                            if text_with_placeholders[k] == "\\" and k + 1 < len(text_with_placeholders):
+                                # Skip escaped character (e.g., \) or \()
+                                k += 2
+                            elif text_with_placeholders[k] == "(":
+                                paren_depth += 1
+                                k += 1
+                            elif text_with_placeholders[k] == ")":
+                                paren_depth -= 1
+                                k += 1
+                            else:
+                                k += 1
+
+                        if paren_depth == 0:
+                            # Found complete link or image [text](url) or ![alt](src)
+                            # For images, remove the preceding '!' that was already added
+                            if is_image and result and result[-1] == "!":
+                                result.pop()
+                            result.append(link_text)
+                            i = k
+                            continue
+                elif j < len(text_with_placeholders) and text_with_placeholders[j] == "[":
+                    # Reference-style link: [text][ref] or [text][]
+                    k = j + 1
+                    # Find the matching ']'
+                    while k < len(text_with_placeholders) and text_with_placeholders[k] != "]":
+                        if text_with_placeholders[k] == "\\" and k + 1 < len(text_with_placeholders):
+                            k += 2  # Skip escaped character
+                        else:
+                            k += 1
+                    if k < len(text_with_placeholders) and text_with_placeholders[k] == "]":
+                        k += 1  # Skip the ']'
+                        # Found complete reference-style link/image
+                        if is_image and result and result[-1] == "!":
+                            result.pop()
+                        result.append(link_text)
+                        i = k
+                        continue
+
+            # Not a valid link, keep the '['
+            result.append(text_with_placeholders[i])
+            i += 1
+        else:
+            result.append(text_with_placeholders[i])
+            i += 1
+
+    text_stripped = "".join(result)
+
+    # Restore inline code spans
+    for i, code_text in enumerate(inline_code_texts):
+        text_stripped = text_stripped.replace(f"\x00CODE_{i}\x00", code_text)
+
+    return text_stripped
+
+
 def generate_slug(title: str) -> str:
     """
     Generates a slug for a given title to be used as an anchor link in markdown.
@@ -495,8 +734,10 @@ def generate_toc(headers: list[str]) -> list[str]:
     toc = [f"{TOC_START_MARKER}\n", "## Table of Contents\n\n"]
 
     for heading in headers:
-        level = heading.count("#")
+        # Count only leading # characters, not all # in the string (e.g., URLs with #anchor)
+        level = len(heading) - len(heading.lstrip("#"))
         title = heading[level:].strip()
+        title = strip_markdown_links(title)
         link = generate_slug(title)
         toc.append("    " * (level - 2) + f"1. [{title}](#{link})" + "\n")
 

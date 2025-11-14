@@ -15,6 +15,7 @@ from toc_markdown.cli import (
     get_max_line_length,
     normalize_filepath,
     safe_read,
+    strip_markdown_links,
 )
 
 
@@ -209,3 +210,237 @@ def test_safe_read_raises_for_directory(tmp_path: Path):
 
     with pytest.raises(IOError):
         safe_read(directory)
+
+
+def test_strip_markdown_links_single_link():
+    """Test stripping a single markdown link."""
+    assert strip_markdown_links("[Link Text](https://example.com)") == "Link Text"
+
+
+def test_strip_markdown_links_with_surrounding_text():
+    """Test stripping links while preserving surrounding text."""
+    assert strip_markdown_links("See [Link](url) for details") == "See Link for details"
+
+
+def test_strip_markdown_links_multiple_links():
+    """Test stripping multiple links from the same string."""
+    text = "[First](url1) and [Second](url2)"
+    assert strip_markdown_links(text) == "First and Second"
+
+
+def test_strip_markdown_links_no_links():
+    """Test that text without links is unchanged."""
+    assert strip_markdown_links("Plain text") == "Plain text"
+
+
+def test_strip_markdown_links_brackets_without_url():
+    """Test that brackets without parentheses are preserved."""
+    assert strip_markdown_links("Text with [brackets] only") == "Text with [brackets] only"
+
+
+def test_strip_markdown_links_parentheses_without_brackets():
+    """Test that parentheses without brackets are preserved."""
+    assert strip_markdown_links("Text (with parens)") == "Text (with parens)"
+
+
+def test_strip_markdown_links_empty_link_text():
+    """Test handling of empty link text."""
+    assert strip_markdown_links("[](https://example.com)") == ""
+
+
+def test_strip_markdown_links_complex_url():
+    """Test stripping links with complex URLs."""
+    text = "[Title](https://example.com/path?param=value&other=123#anchor)"
+    assert strip_markdown_links(text) == "Title"
+
+
+def test_strip_markdown_links_nested_brackets_in_text():
+    """Test link text containing balanced nested brackets."""
+    # The state machine now handles balanced nested brackets correctly.
+    result = strip_markdown_links("[Text [with] brackets](url)")
+    assert result == "Text [with] brackets"
+
+
+def test_strip_markdown_links_special_characters_in_text():
+    """Test link text with special characters."""
+    assert strip_markdown_links("[Café & Résumé](url)") == "Café & Résumé"
+
+
+def test_strip_markdown_links_mixed_content():
+    """Test mixed content with links and plain text."""
+    text = "Start [Link1](url1) middle [Link2](url2) end"
+    assert strip_markdown_links(text) == "Start Link1 middle Link2 end"
+
+
+def test_strip_markdown_links_url_with_parentheses():
+    """Test URLs containing parentheses are correctly handled."""
+    text = "[Wikipedia](https://en.wikipedia.org/wiki/Bracket_(disambiguation))"
+    assert strip_markdown_links(text) == "Wikipedia"
+
+
+def test_strip_markdown_links_url_with_nested_parens():
+    """Test URLs with nested parentheses."""
+    text = "[Link](https://example.com/foo_(bar)_baz)"
+    assert strip_markdown_links(text) == "Link"
+
+
+def test_strip_markdown_links_inside_inline_code():
+    """Test that links inside inline code are preserved."""
+    text = "Use `[link](url)` syntax"
+    assert strip_markdown_links(text) == "Use `[link](url)` syntax"
+
+
+def test_strip_markdown_links_mixed_code_and_links():
+    """Test mixing inline code and actual links."""
+    text = "See [Doc](url) and use `[example](url)` format"
+    assert strip_markdown_links(text) == "See Doc and use `[example](url)` format"
+
+
+def test_strip_markdown_links_double_backtick_code():
+    """Test that links inside double-backtick inline code are preserved."""
+    text = "Use `` `[link](url)` `` syntax"
+    assert strip_markdown_links(text) == "Use `` `[link](url)` `` syntax"
+
+
+def test_strip_markdown_links_triple_backtick_code():
+    """Test that links inside triple-backtick inline code are preserved."""
+    text = "Use ``` ``[link](url)`` ``` syntax"
+    assert strip_markdown_links(text) == "Use ``` ``[link](url)`` ``` syntax"
+
+
+def test_strip_markdown_links_multi_backtick_mixed():
+    """Test mixing multi-backtick code with real links."""
+    text = "See [Real](url) but preserve `` `[code](url)` `` example"
+    assert strip_markdown_links(text) == "See Real but preserve `` `[code](url)` `` example"
+
+
+def test_strip_markdown_links_deeply_nested_parentheses():
+    """Test URLs with deeply nested parentheses (2+ levels)."""
+    text = "[Link](https://example.com/foo(bar(baz)))"
+    assert strip_markdown_links(text) == "Link"
+
+
+def test_strip_markdown_links_triple_nested_parentheses():
+    """Test URLs with triple-nested parentheses."""
+    text = "[Link](https://example.com/foo(bar(baz(qux))))"
+    assert strip_markdown_links(text) == "Link"
+
+
+def test_strip_markdown_links_nested_parens_with_text():
+    """Test nested parentheses in URLs with surrounding text."""
+    text = "See [Wikipedia](https://en.wikipedia.org/wiki/Foo(bar(baz))) for details"
+    assert strip_markdown_links(text) == "See Wikipedia for details"
+
+
+def test_strip_markdown_links_escaped_paren_in_url():
+    """Test URLs with escaped parentheses."""
+    text = r"[Link](https://example.com/foo\)bar)"
+    assert strip_markdown_links(text) == "Link"
+
+
+def test_strip_markdown_links_escaped_paren_with_text():
+    """Test escaped parentheses in URLs with surrounding text."""
+    text = r"See [Link](https://example.com/foo\)bar) extra"
+    assert strip_markdown_links(text) == "See Link extra"
+
+
+def test_strip_markdown_links_escaped_bracket_in_link_text():
+    """Test link text containing escaped brackets."""
+    text = r"[Example [Label \]]](https://example.com)"
+    assert strip_markdown_links(text) == r"Example [Label \]]"
+
+
+def test_strip_markdown_links_multiple_escaped_chars():
+    """Test multiple escaped characters in both link text and URL."""
+    text = r"[Text with \] bracket](https://example.com/path\)extra)"
+    assert strip_markdown_links(text) == r"Text with \] bracket"
+
+
+def test_strip_markdown_links_escaped_opening_bracket():
+    """Test that escaped opening bracket is not treated as link start."""
+    text = r"Escaped \[Link](https://example.com)"
+    assert strip_markdown_links(text) == r"Escaped \[Link](https://example.com)"
+
+
+def test_strip_markdown_links_escaped_backtick():
+    """Test that escaped backticks are not treated as code delimiters."""
+    text = r"Escaped \`[Link](url)\` text"
+    assert strip_markdown_links(text) == r"Escaped \`Link\` text"
+
+
+def test_strip_markdown_links_inline_image():
+    """Test that inline images have the ! prefix removed."""
+    text = "![Alt text](image.png)"
+    assert strip_markdown_links(text) == "Alt text"
+
+
+def test_strip_markdown_links_inline_image_with_text():
+    """Test inline images with surrounding text."""
+    text = "See ![Logo](logo.png) for details"
+    assert strip_markdown_links(text) == "See Logo for details"
+
+
+def test_strip_markdown_links_mixed_links_and_images():
+    """Test mixing regular links and inline images."""
+    text = "[Link](url) and ![Image](img.png) example"
+    assert strip_markdown_links(text) == "Link and Image example"
+
+
+def test_strip_markdown_links_escaped_image_marker():
+    """Test that escaped image marker is preserved (not treated as image)."""
+    text = r"\![Alt](logo.png) heading"
+    assert strip_markdown_links(text) == r"\![Alt](logo.png) heading"
+
+
+def test_strip_markdown_links_escaped_image_with_real_link():
+    """Test escaped image marker mixed with real link."""
+    text = r"See \![Logo](logo.png) and [Real](url) here"
+    assert strip_markdown_links(text) == r"See \![Logo](logo.png) and Real here"
+
+
+def test_strip_markdown_links_angle_bracketed_url():
+    """Test angle-bracketed URL is handled correctly."""
+    text = "[Link](<foo(bar>)"
+    assert strip_markdown_links(text) == "Link"
+
+
+def test_strip_markdown_links_angle_bracketed_url_with_parens():
+    """Test angle-bracketed URL containing parentheses."""
+    text = "[Link](<url(with)parens>)"
+    assert strip_markdown_links(text) == "Link"
+
+
+def test_strip_markdown_links_angle_bracketed_url_with_text():
+    """Test angle-bracketed URL with surrounding text."""
+    text = "See [Wikipedia](<https://en.wikipedia.org/wiki/Foo(bar)>) for info"
+    assert strip_markdown_links(text) == "See Wikipedia for info"
+
+
+def test_strip_markdown_links_reference_style_link():
+    """Test reference-style link is stripped correctly."""
+    text = "[Docs][ref] heading"
+    assert strip_markdown_links(text) == "Docs heading"
+
+
+def test_strip_markdown_links_reference_style_image():
+    """Test reference-style image is stripped correctly."""
+    text = "![Logo][badge] header"
+    assert strip_markdown_links(text) == "Logo header"
+
+
+def test_strip_markdown_links_reference_style_shortcut():
+    """Test reference-style shortcut link [text][]."""
+    text = "[ref][] description"
+    assert strip_markdown_links(text) == "ref description"
+
+
+def test_strip_markdown_links_multiple_reference_links():
+    """Test multiple reference-style links."""
+    text = "[First][ref1] and [Second][ref2] text"
+    assert strip_markdown_links(text) == "First and Second text"
+
+
+def test_strip_markdown_links_mixed_inline_and_reference():
+    """Test mixing inline and reference-style links."""
+    text = "[Inline](url) and [Reference][ref] links"
+    assert strip_markdown_links(text) == "Inline and Reference links"
