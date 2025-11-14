@@ -45,6 +45,110 @@ def test_parse_file_ignores_code_blocks(tmp_path: Path):
     assert headers == ["## Visible", "### Still Visible"]
 
 
+def test_parse_file_handles_tilde_fences_with_info_strings(tmp_path: Path):
+    target = _write_markdown(
+        tmp_path,
+        """
+        ## Visible
+           ~~~python
+           ## Hidden
+             ~~~
+        ### After
+        """,
+    )
+
+    _, headers, _, _ = parse_file(target)
+    assert headers == ["## Visible", "### After"]
+
+
+def test_parse_file_does_not_close_fences_with_deep_indentation(tmp_path: Path):
+    target = _write_markdown(
+        tmp_path,
+        "\n".join(
+            [
+                "```",
+                "    ```",
+                "    ## Hidden",
+                "    ```",
+                "```",
+                "## After",
+            ]
+        )
+        + "\n",
+    )
+
+    _, headers, _, _ = parse_file(target)
+    assert headers == ["## After"]
+
+
+def test_parse_file_ignores_short_fence_sequences(tmp_path: Path):
+    target = _write_markdown(
+        tmp_path,
+        "\n".join(
+            [
+                "```",
+                "``",
+                "## Hidden",
+                "```",
+                "## After",
+            ]
+        )
+        + "\n",
+    )
+
+    _, headers, _, _ = parse_file(target)
+    assert headers == ["## After"]
+
+
+@pytest.mark.parametrize("prefix", [" \t", "  \t", "   \t", " \t "])
+def test_parse_file_counts_mixed_whitespace_indents(tmp_path: Path, prefix: str):
+    target = _write_markdown(
+        tmp_path,
+        "\n".join(
+            [
+                "## Visible",
+                f"{prefix}## Hidden",
+                "### After",
+            ]
+        )
+        + "\n",
+    )
+
+    _, headers, _, _ = parse_file(target)
+    assert headers == ["## Visible", "### After"]
+
+
+def test_parse_file_closes_fences_inside_lists(tmp_path: Path):
+    target = _write_markdown(
+        tmp_path,
+        """
+        - item
+          ```
+          ## Hidden
+            ```
+        ## After
+        """,
+    )
+
+    _, headers, _, _ = parse_file(target)
+    assert headers == ["## After"]
+
+
+def test_parse_file_ignores_indented_code_blocks(tmp_path: Path):
+    target = _write_markdown(
+        tmp_path,
+        """
+        ## Visible
+            ## Hidden
+
+        ### Another
+        """,
+    )
+
+    _, headers, _, _ = parse_file(target)
+    assert headers == ["## Visible", "### Another"]
+
+
 def test_parse_file_tracks_toc_markers(tmp_path: Path):
     target = _write_markdown(
         tmp_path,

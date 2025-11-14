@@ -10,6 +10,7 @@ from toc_markdown.cli import (
     TOC_END_MARKER,
     TOC_START_MARKER,
     cli,
+    parse_file,
 )
 
 

@@ -18,6 +18,8 @@ import click
 
 # This pattern matches 2nd and 3rd level headers, but ignores 1st level headers.
 HEADER_PATTERN = re.compile(r"^(#{2,3}) (.*)$")
+CODE_FENCE_PATTERN = re.compile(r"^(?P<indent>\s{0,3})(?P<fence>`{3,}|~{3,})(?P<info>.*)$")
+CLOSING_FENCE_MAX_INDENT = 3
 
 TOC_START_MARKER = "<!-- TOC -->"
 TOC_END_MARKER = "<!-- /TOC -->"
@@ -224,6 +226,23 @@ def safe_read(filepath: Path) -> TextIO:
         raise IOError(error_message) from error
 
 
+def _leading_whitespace_columns(line: str) -> int:
+    """
+    Returns the number of visual columns occupied by the line's leading whitespace.
+    Tabs advance to the next multiple of four columns to match Markdown indentation rules.
+    """
+    columns = 0
+    for character in line:
+        if character == " ":
+            columns += 1
+            continue
+        if character == "\t":
+            columns += 4 - (columns % 4)
+            continue
+        break
+    return columns
+
+
 def parse_file(filepath: Path) -> tuple[list[str], list[str], int | None, int | None]:
     """
     Parses the specified Markdown file.
@@ -245,21 +264,61 @@ def parse_file(filepath: Path) -> tuple[list[str], list[str], int | None, int | 
     toc_start_line: int | None = None
     toc_end_line: int | None = None
 
-    # Flag for code blocks
-    is_in_code_block = False
+    # Flags for code blocks
+    code_fence_char: str | None = None
+    code_fence_length = 0
+    code_fence_indent_columns = 0
+    is_in_indented_code_block = False
 
     try:
         with safe_read(filepath) as file:
             for line_number, line in enumerate(file):
                 full_file.append(line)
 
-                # Tracks if we're in a code block
-                if line.startswith(CODE_FENCE):
-                    is_in_code_block = not is_in_code_block
+                # Tracks fenced code blocks (``` or ~~~, including info strings)
+                if code_fence_char is not None:
+                    indent_columns = _leading_whitespace_columns(line)
+                    stripped_line = line.lstrip(" 	")
+                    if not stripped_line or stripped_line[0] != code_fence_char:
+                        continue
+
+                    fence_run_length = len(stripped_line) - len(stripped_line.lstrip(code_fence_char))
+
+                    if fence_run_length >= code_fence_length and stripped_line[fence_run_length:].strip() == "":
+                        additional_indent = indent_columns - code_fence_indent_columns
+                        if additional_indent <= CLOSING_FENCE_MAX_INDENT:
+                            code_fence_char = None
+                            code_fence_length = 0
+                            code_fence_indent_columns = 0
+
                     continue
 
+                fence_match = CODE_FENCE_PATTERN.match(line)
+                if fence_match:
+                    fence_sequence = fence_match.group("fence")
+                    code_fence_char = fence_sequence[0]
+                    code_fence_length = len(fence_sequence)
+                    indent_prefix = fence_match.group("indent") or ""
+                    code_fence_indent_columns = _leading_whitespace_columns(indent_prefix)
+                    is_in_indented_code_block = False
+                    continue
+
+                # Tracks indented code blocks (any mix totaling 4+ columns)
+                leading_columns = _leading_whitespace_columns(line)
+                if leading_columns >= 4:
+                    is_in_indented_code_block = True
+                    continue
+                if is_in_indented_code_block:
+                    if line.strip() == "":
+                        continue
+                    is_in_indented_code_block = False
+
                 # Ignores code blocks and existing TOC
-                if is_in_code_block or line.startswith(TOC_HEADER):
+                if (
+                    code_fence_char is not None
+                    or is_in_indented_code_block
+                    or line.startswith(TOC_HEADER)
+                ):
                     continue
 
                 # Finds headers
