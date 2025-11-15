@@ -733,12 +733,24 @@ def generate_toc(headers: list[str]) -> list[str]:
     """
     toc = [f"{TOC_START_MARKER}\n", "## Table of Contents\n\n"]
 
+    # Track all used slugs to handle duplicates (GitHub-style: slug, slug-1, slug-2, ...)
+    used_slugs: set[str] = set()
+
     for heading in headers:
         # Count only leading # characters, not all # in the string (e.g., URLs with #anchor)
         level = len(heading) - len(heading.lstrip("#"))
         title = heading[level:].strip()
         title = strip_markdown_links(title)
-        link = generate_slug(title)
+        base_slug = generate_slug(title)
+
+        # Find unique slug by appending counter if needed
+        link = base_slug
+        counter = 1
+        while link in used_slugs:
+            link = f"{base_slug}-{counter}"
+            counter += 1
+
+        used_slugs.add(link)
         toc.append("    " * (level - 2) + f"1. [{title}](#{link})" + "\n")
 
     toc.append(f"{TOC_END_MARKER}" + "\n")

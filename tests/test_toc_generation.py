@@ -275,3 +275,148 @@ def test_generate_toc_mixed_link_types():
     assert "1. [Inline Header](#inline-header)\n" in toc
     assert "    1. [Reference Subheader](#reference-subheader)\n" in toc
     assert "    1. [Angle Subheader](#angle-subheader)\n" in toc
+
+
+def test_duplicate_headers_two_identical():
+    """Test two identical headers generate unique slugs."""
+    headers = ["## Introduction", "## Introduction"]
+    toc = generate_toc(headers)
+
+    assert "1. [Introduction](#introduction)\n" in toc
+    assert "1. [Introduction](#introduction-1)\n" in toc
+
+
+def test_duplicate_headers_three_identical():
+    """Test three identical headers generate unique slugs."""
+    headers = ["## Introduction", "## Introduction", "## Introduction"]
+    toc = generate_toc(headers)
+
+    assert toc == [
+        f"{TOC_START_MARKER}\n",
+        "## Table of Contents\n\n",
+        "1. [Introduction](#introduction)\n",
+        "1. [Introduction](#introduction-1)\n",
+        "1. [Introduction](#introduction-2)\n",
+        f"{TOC_END_MARKER}\n",
+    ]
+
+
+def test_duplicate_headers_mixed_with_unique():
+    """Test mix of duplicate and unique headers."""
+    headers = [
+        "## Introduction",
+        "## Features",
+        "## Introduction",
+        "## Installation",
+        "## Introduction",
+    ]
+    toc = generate_toc(headers)
+
+    assert "1. [Introduction](#introduction)\n" in toc
+    assert "1. [Features](#features)\n" in toc
+    assert "1. [Introduction](#introduction-1)\n" in toc
+    assert "1. [Installation](#installation)\n" in toc
+    assert "1. [Introduction](#introduction-2)\n" in toc
+
+
+def test_duplicate_headers_different_nesting_levels():
+    """Test duplicates at different heading levels."""
+    headers = [
+        "## Getting Started",
+        "### Getting Started",
+        "## Getting Started",
+    ]
+    toc = generate_toc(headers)
+
+    assert "1. [Getting Started](#getting-started)\n" in toc
+    assert "    1. [Getting Started](#getting-started-1)\n" in toc
+    assert "1. [Getting Started](#getting-started-2)\n" in toc
+
+
+def test_duplicate_collision_with_numbered_header():
+    """Test collision between duplicate and explicitly numbered header."""
+    headers = [
+        "## Header",
+        "## Header",
+        "## Header 1",
+    ]
+    toc = generate_toc(headers)
+
+    # First "Header" gets no suffix
+    # Second "Header" gets -1 suffix
+    # "Header 1" also generates "header-1" base slug, so it gets -1 suffix
+    assert "1. [Header](#header)\n" in toc
+    assert "1. [Header](#header-1)\n" in toc
+    assert "1. [Header 1](#header-1-1)\n" in toc
+
+
+def test_duplicate_unicode_collision():
+    """Test unicode normalization creates duplicate slugs."""
+    headers = [
+        "## Café",
+        "## Cafe",
+    ]
+    toc = generate_toc(headers)
+
+    # Both normalize to "cafe", so second gets -1 suffix
+    assert "1. [Café](#cafe)\n" in toc
+    assert "1. [Cafe](#cafe-1)\n" in toc
+
+
+def test_duplicate_punctuation_collision():
+    """Test punctuation removal creates duplicate slugs."""
+    headers = [
+        "## What's up?",
+        "## Whats up",
+    ]
+    toc = generate_toc(headers)
+
+    # Both normalize to "whats-up", so second gets -1 suffix
+    assert "1. [What's up?](#whats-up)\n" in toc
+    assert "1. [Whats up](#whats-up-1)\n" in toc
+
+
+def test_duplicate_empty_title_headers():
+    """Test multiple headers that normalize to empty/untitled."""
+    headers = [
+        "## ???",
+        "## !!!",
+        "## @@@",
+    ]
+    toc = generate_toc(headers)
+
+    # All normalize to "untitled"
+    assert "1. [???](#untitled)\n" in toc
+    assert "1. [!!!](#untitled-1)\n" in toc
+    assert "1. [@@@](#untitled-2)\n" in toc
+
+
+def test_duplicate_multiple_groups():
+    """Test multiple groups of duplicates."""
+    headers = [
+        "## Setup",
+        "## Setup",
+        "## Config",
+        "## Config",
+        "## Setup",
+    ]
+    toc = generate_toc(headers)
+
+    assert "1. [Setup](#setup)\n" in toc
+    assert "1. [Setup](#setup-1)\n" in toc
+    assert "1. [Config](#config)\n" in toc
+    assert "1. [Config](#config-1)\n" in toc
+    assert "1. [Setup](#setup-2)\n" in toc
+
+
+def test_duplicate_with_markdown_links_stripped():
+    """Test duplicates after markdown links are stripped."""
+    headers = [
+        "## [Click here](url) to start",
+        "## Click here to start",
+    ]
+    toc = generate_toc(headers)
+
+    # Both normalize to "click-here-to-start" after link stripping
+    assert "1. [Click here to start](#click-here-to-start)\n" in toc
+    assert "1. [Click here to start](#click-here-to-start-1)\n" in toc
