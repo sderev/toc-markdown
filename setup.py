@@ -2,9 +2,10 @@
 Setup configuration for the toc-markdown package.
 
 This script uses setuptools to package and distribute the toc-markdown
-library. It also reads the requirements and long description directly 
+library. It also reads the requirements and long description directly
 from external files for ease of maintenance.
 """
+
 from setuptools import find_packages, setup
 
 VERSION = "0.0.2"

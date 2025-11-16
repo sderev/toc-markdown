@@ -3,14 +3,11 @@ from __future__ import annotations
 import textwrap
 from pathlib import Path
 
-import pytest
-
 from toc_markdown.cli import (
     MAX_TOC_SECTION_LINES,
     TOC_END_MARKER,
     TOC_START_MARKER,
     cli,
-    parse_file,
 )
 
 

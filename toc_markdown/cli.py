@@ -6,18 +6,14 @@ If an existing TOC is present, it updates it; otherwise, it outputs it to stdout
 from __future__ import annotations
 
 import os
-import re
 import stat
-import string
 import tempfile
-import unicodedata
 from pathlib import Path
 from typing import TextIO
 
 import click
 
-# Re-exports for backward compatibility during refactoring
-from .constants import (  # noqa: F401
+from .constants import (
     CLOSING_FENCE_MAX_INDENT,
     CODE_FENCE_PATTERN,
     HEADER_PATTERN,
@@ -27,19 +23,11 @@ from .constants import (  # noqa: F401
     TOC_HEADER,
     TOC_START_MARKER,
 )
-from .generator import generate_toc_entries as generate_toc, validate_toc_markers  # noqa: F401
-from .models import ParseResult  # noqa: F401
-from .parser import (  # noqa: F401
-    find_inline_code_spans,
-    is_escaped,
-    parse_markdown,
-    strip_markdown_links,
-)
-from .slugify import generate_slug  # noqa: F401
-
-# CLI-specific patterns (not used by pure business logic modules)
-MARKDOWN_LINK_PATTERN = re.compile(r"\[([^\]]*)\]\((?:[^()]|\([^)]*\))*\)")
-INLINE_CODE_PATTERN = re.compile(r"`[^`]+`")
+from .exceptions import LineTooLongError, ParseError, TooManyHeadersError
+from .generator import generate_toc_entries as generate_toc
+from .generator import validate_toc_markers
+from .parser import find_inline_code_spans, is_escaped, parse_markdown, strip_markdown_links
+from .slugify import generate_slug
 
 MARKDOWN_EXTENSIONS = (".md", ".markdown")
 CODE_FENCE = "```"
@@ -47,6 +35,26 @@ MAX_FILE_SIZE_ENV_VAR = "TOC_MARKDOWN_MAX_FILE_SIZE"
 DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MiB
 MAX_LINE_LENGTH_ENV_VAR = "TOC_MARKDOWN_MAX_LINE_LENGTH"
 DEFAULT_MAX_LINE_LENGTH = 10_000
+
+__all__ = [
+    "cli",
+    "parse_file",
+    "generate_toc",
+    "generate_slug",
+    "parse_markdown",
+    "strip_markdown_links",
+    "find_inline_code_spans",
+    "is_escaped",
+    "TOC_START_MARKER",
+    "TOC_END_MARKER",
+    "TOC_HEADER",
+    "CODE_FENCE",
+    "MAX_TOC_SECTION_LINES",
+    "HEADER_PATTERN",
+    "CODE_FENCE_PATTERN",
+    "CLOSING_FENCE_MAX_INDENT",
+    "MAX_HEADERS",
+]
 
 
 @click.command()
@@ -78,7 +86,9 @@ def cli(filepath: str):
             validate_toc_markers(toc_start_line, toc_end_line)
         except ValueError as error:
             raise click.BadParameter(str(error)) from error
-        update_toc(full_file, filepath, toc, toc_start_line, toc_end_line, post_parse_stat, initial_stat)
+        update_toc(
+            full_file, filepath, toc, toc_start_line, toc_end_line, post_parse_stat, initial_stat
+        )
     # Inserts TOC
     else:
         print("".join(toc), end="")
@@ -150,7 +160,9 @@ def normalize_filepath(raw_path: str, base_dir: Path) -> Path:
     path = Path(raw_path).expanduser()
 
     if contains_symlink(path):
-        error_message = f"Symlinks are not supported for security reasons: {click.style(str(path), fg='red')}"
+        error_message = (
+            f"Symlinks are not supported for security reasons: {click.style(str(path), fg='red')}"
+        )
         raise click.BadParameter(error_message)
 
     try:
@@ -249,9 +261,7 @@ def ensure_file_unchanged(
     )
 
     if fingerprint_before != fingerprint_after:
-        error_message = (
-            f"{click.style(str(filepath), fg='red')} changed during processing; refusing to overwrite."
-        )
+        error_message = f"{click.style(str(filepath), fg='red')} changed during processing; refusing to overwrite."
         raise IOError(error_message)
 
 
@@ -275,26 +285,6 @@ def safe_read(filepath: Path) -> TextIO:
     ) as error:
         error_message = f"Error accessing {filepath}: {click.style(str(error), fg='red')}"
         raise IOError(error_message) from error
-
-
-def _enforce_line_length(
-    line: str, line_number: int, filepath: Path, max_line_length: int
-) -> None:
-    """
-    Ensures a single line does not exceed the configured maximum length.
-    """
-    line_len = len(line)
-    if line.endswith("\n"):
-        line_len -= 1
-        if line_len > 0 and line[line_len - 1] == "\r":
-            line_len -= 1
-    if line_len > max_line_length:
-        error_message = (
-            f"{click.style(str(filepath), fg='red')} contains a line at line {line_number + 1} "
-            f"exceeding the maximum allowed length of {click.style(str(max_line_length), fg='red')} "
-            "characters."
-        )
-        raise IOError(error_message)
 
 
 def parse_file(
@@ -327,24 +317,22 @@ def parse_file(
     # Parse content using pure function
     try:
         result = parse_markdown(content, max_line_length)
-    except ValueError as error:
-        # Convert ValueError to IOError with Click styling and filepath context
-        error_message = str(error)
-        if "exceeds maximum allowed length" in error_message:
-            # Extract line number from error message
-            error_message = (
-                f"{click.style(str(filepath), fg='red')} contains a line {error_message.split('Line ')[1].split(' exceeds')[0]} "
-                f"exceeding the maximum allowed length of {click.style(str(max_line_length), fg='red')} "
-                "characters."
-            )
-        elif "Too many headers" in error_message:
-            error_message = (
-                f"{click.style(str(filepath), fg='red')} contains too many headers "
-                f"(limit: {click.style(str(MAX_HEADERS), fg='red')})."
-            )
-        else:
-            error_message = f"{click.style(str(filepath), fg='red')}: {error_message}"
-        raise IOError(error_message) from error
+    except LineTooLongError as error:
+        error_message = (
+            f"{click.style(str(filepath), fg='red')} contains a line at line {error.line_number} "
+            f"exceeding the maximum allowed length of {click.style(str(error.max_line_length), fg='red')} "
+            "characters."
+        )
+        raise click.ClickException(error_message) from error
+    except TooManyHeadersError as error:
+        error_message = (
+            f"{click.style(str(filepath), fg='red')} contains too many headers "
+            f"(limit: {click.style(str(error.limit), fg='red')})."
+        )
+        raise click.ClickException(error_message) from error
+    except ParseError as error:
+        error_message = f"{click.style(str(filepath), fg='red')}: {error}"
+        raise click.ClickException(error_message) from error
 
     # Return as tuple for backward compatibility with existing code
     return result.full_file, result.headers, result.toc_start_line, result.toc_end_line

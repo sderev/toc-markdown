@@ -39,7 +39,7 @@ def generate_toc_entries(headers: list[str]) -> list[str]:
     #   3. "Header 1" has base slug "header-1" which collides with #2
     #      The counter says next is "header-1-1" but we must verify it's not taken
     slug_counters: dict[str, int] = {}  # Track next counter for each base slug
-    used_slugs: set[str] = set()        # Track all slugs actually in use
+    used_slugs: set[str] = set()  # Track all slugs actually in use
 
     for heading in headers:
         # Count only leading # characters, not all # in the string (e.g., URLs with #anchor)

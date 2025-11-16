@@ -7,7 +7,6 @@ from pathlib import Path
 
 import click
 import pytest
-
 from toc_markdown.cli import (
     collect_file_stat,
     contains_symlink,
@@ -147,6 +146,7 @@ def test_collect_file_stat_rejects_mocked_character_device(tmp_path: Path, monke
 
     # Mock os.stat to return character device mode
     original_stat = os.stat
+
     def mock_stat(path, *args, **kwargs):
         result = original_stat(path, *args, **kwargs)
         if str(path) == str(device):
@@ -158,10 +158,11 @@ def test_collect_file_stat_rejects_mocked_character_device(tmp_path: Path, monke
                 st_mtime_ns = result.st_mtime_ns
                 st_atime = result.st_atime
                 st_atime_ns = result.st_atime_ns
-                st_uid = result.st_uid if hasattr(result, 'st_uid') else 0
-                st_gid = result.st_gid if hasattr(result, 'st_gid') else 0
-                st_ino = result.st_ino if hasattr(result, 'st_ino') else 0
-                st_dev = result.st_dev if hasattr(result, 'st_dev') else 0
+                st_uid = result.st_uid if hasattr(result, "st_uid") else 0
+                st_gid = result.st_gid if hasattr(result, "st_gid") else 0
+                st_ino = result.st_ino if hasattr(result, "st_ino") else 0
+                st_dev = result.st_dev if hasattr(result, "st_dev") else 0
+
             return MockStatResult()
         return result
 
@@ -179,6 +180,7 @@ def test_collect_file_stat_rejects_mocked_block_device(tmp_path: Path, monkeypat
 
     # Mock os.stat to return block device mode
     original_stat = os.stat
+
     def mock_stat(path, *args, **kwargs):
         result = original_stat(path, *args, **kwargs)
         if str(path) == str(device):
@@ -190,10 +192,11 @@ def test_collect_file_stat_rejects_mocked_block_device(tmp_path: Path, monkeypat
                 st_mtime_ns = result.st_mtime_ns
                 st_atime = result.st_atime
                 st_atime_ns = result.st_atime_ns
-                st_uid = result.st_uid if hasattr(result, 'st_uid') else 0
-                st_gid = result.st_gid if hasattr(result, 'st_gid') else 0
-                st_ino = result.st_ino if hasattr(result, 'st_ino') else 0
-                st_dev = result.st_dev if hasattr(result, 'st_dev') else 0
+                st_uid = result.st_uid if hasattr(result, "st_uid") else 0
+                st_gid = result.st_gid if hasattr(result, "st_gid") else 0
+                st_ino = result.st_ino if hasattr(result, "st_ino") else 0
+                st_dev = result.st_dev if hasattr(result, "st_dev") else 0
+
             return MockStatResult()
         return result
 

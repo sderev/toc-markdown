@@ -10,7 +10,6 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-
 import toc_markdown.cli as cli_module
 
 
@@ -18,6 +17,11 @@ def _write(tmp_path: Path, name: str, content: str) -> Path:
     target = tmp_path / name
     target.write_text(textwrap.dedent(content), encoding="utf-8")
     return target
+
+
+def _error_text(result) -> str:
+    """Return combined stdout and exception text for assertions."""
+    return f"{result.output}{result.exception}"
 
 
 @pytest.mark.skipif(not hasattr(os, "symlink"), reason="Symlink support is required")
@@ -68,7 +72,8 @@ def test_file_size_limit_enforced(cli_runner, tmp_path, monkeypatch):
 
     result = cli_runner.invoke(cli_module.cli, [str(target)])
     assert result.exit_code != 0
-    assert "maximum allowed size" in str(result.exception)
+    error_text = _error_text(result)
+    assert "maximum allowed size" in error_text
 
 
 def test_line_length_limit_enforced(cli_runner, tmp_path, monkeypatch):
@@ -87,8 +92,9 @@ def test_line_length_limit_enforced(cli_runner, tmp_path, monkeypatch):
 
     result = cli_runner.invoke(cli_module.cli, [str(target)])
     assert result.exit_code != 0
-    assert "maximum allowed length" in str(result.exception)
-    assert "10000" in str(result.exception)
+    error_text = _error_text(result)
+    assert "maximum allowed length" in error_text
+    assert "10000" in error_text
 
 
 def test_line_length_within_limit_allowed(cli_runner, tmp_path, monkeypatch):
@@ -107,7 +113,6 @@ def test_line_length_within_limit_allowed(cli_runner, tmp_path, monkeypatch):
 
     result = cli_runner.invoke(cli_module.cli, [str(target)])
     assert result.exit_code == 0
-
 
 
 def test_line_length_limit_enforced_without_toc_end(cli_runner, tmp_path, monkeypatch):
@@ -133,7 +138,8 @@ def test_line_length_limit_enforced_without_toc_end(cli_runner, tmp_path, monkey
 
     result = cli_runner.invoke(cli_module.cli, [str(target)])
     assert result.exit_code != 0
-    assert "maximum allowed length" in str(result.exception)
+    error_text = _error_text(result)
+    assert "maximum allowed length" in error_text
 
 
 def test_line_length_limit_ignores_code_blocks(cli_runner, tmp_path, monkeypatch):
@@ -173,8 +179,9 @@ def test_line_length_limit_configurable(cli_runner, tmp_path, monkeypatch):
 
     result = cli_runner.invoke(cli_module.cli, [str(target)])
     assert result.exit_code != 0
-    assert "maximum allowed length" in str(result.exception)
-    assert "50" in str(result.exception)
+    error_text = _error_text(result)
+    assert "maximum allowed length" in error_text
+    assert "50" in error_text
 
 
 def test_line_length_limit_ignores_existing_toc(cli_runner, tmp_path, monkeypatch):
@@ -257,8 +264,9 @@ def test_toc_markers_in_code_blocks_dont_bypass_line_length(cli_runner, tmp_path
     # Would succeed on buggy code (line incorrectly marked as "in TOC")
     result = cli_runner.invoke(cli_module.cli, [str(target)])
     assert result.exit_code != 0
-    assert "maximum allowed length" in str(result.exception)
-    assert "10000" in str(result.exception)
+    error_text = _error_text(result)
+    assert "maximum allowed length" in error_text
+    assert "10000" in error_text
 
 
 def test_long_lines_in_code_blocks_with_fake_markers_allowed(cli_runner, tmp_path, monkeypatch):
@@ -309,8 +317,9 @@ def test_header_count_limit_enforced(cli_runner, tmp_path, monkeypatch):
 
     result = cli_runner.invoke(cli_module.cli, [str(target)])
     assert result.exit_code != 0
-    assert "too many headers" in str(result.exception)
-    assert "10000" in str(result.exception)
+    error_text = _error_text(result)
+    assert "too many headers" in error_text
+    assert "10000" in error_text
 
 
 def test_header_count_within_limit_allowed(cli_runner, tmp_path, monkeypatch):
@@ -373,7 +382,7 @@ def test_atime_preserved_mtime_updated(cli_runner, tmp_path, monkeypatch):
 
     # Set specific timestamps (use past times to avoid edge cases)
     specific_atime = time.time() - 86400  # 1 day ago
-    specific_mtime = time.time() - 3600   # 1 hour ago
+    specific_mtime = time.time() - 3600  # 1 hour ago
     os.utime(target, times=(specific_atime, specific_mtime))
 
     # Get original timestamps with nanosecond precision
@@ -391,7 +400,9 @@ def test_atime_preserved_mtime_updated(cli_runner, tmp_path, monkeypatch):
     assert updated_stat.st_mtime_ns > original_mtime_ns
 
 
-@pytest.mark.skipif(os.geteuid() != 0 if hasattr(os, "geteuid") else True, reason="Requires root privileges")
+@pytest.mark.skipif(
+    os.geteuid() != 0 if hasattr(os, "geteuid") else True, reason="Requires root privileges"
+)
 def test_ownership_preserved_when_privileged(cli_runner, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     target = _write(
@@ -440,7 +451,6 @@ def test_ownership_fails_gracefully_when_unprivileged(cli_runner, tmp_path, monk
     )
 
     # Mock os.chown to raise PermissionError
-    original_chown = os.chown
     def mock_chown(*args, **kwargs):
         raise PermissionError("Operation not permitted")
 
@@ -479,13 +489,19 @@ def test_ownership_skipped_when_unsupported(cli_runner, tmp_path, monkeypatch):
 
     # Mock stat_result to not have st_uid/st_gid attributes (Windows behavior)
     original_stat = os.stat
+
     def mock_stat(path):
         result = original_stat(path)
         # Create a new stat_result without st_uid and st_gid
         # We'll mock getattr to return None for these attributes
         return result
 
-    with mock.patch("toc_markdown.cli.getattr", side_effect=lambda obj, attr, default=None: None if attr in ("st_uid", "st_gid") else getattr(obj, attr, default)):
+    with mock.patch(
+        "toc_markdown.cli.getattr",
+        side_effect=lambda obj, attr, default=None: None
+        if attr in ("st_uid", "st_gid")
+        else getattr(obj, attr, default),
+    ):
         result = cli_runner.invoke(cli_module.cli, [str(target)])
 
     # Should succeed and not attempt chown
@@ -507,7 +523,7 @@ def test_invalid_utf8_handling(cli_runner, tmp_path, monkeypatch):
 
     result = cli_runner.invoke(cli_module.cli, [str(target)])
     assert result.exit_code != 0
-    assert "Invalid UTF-8" in str(result.exception)
+    assert "Invalid UTF-8" in _error_text(result)
 
 
 def test_race_condition_detection(cli_runner, tmp_path, monkeypatch):
@@ -537,7 +553,7 @@ def test_race_condition_detection(cli_runner, tmp_path, monkeypatch):
     result = cli_runner.invoke(cli_module.cli, [str(target)])
 
     assert result.exit_code != 0
-    assert "changed during processing" in str(result.exception)
+    assert "changed during processing" in _error_text(result)
 
 
 @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="mkfifo not available")
@@ -554,8 +570,7 @@ def test_fifo_rejected(cli_runner, tmp_path, monkeypatch):
     result = cli_runner.invoke(cli_module.cli, [str(fifo_path)])
     assert result.exit_code != 0
     # The error could be either from is_file() check or collect_file_stat()
-    assert ("is not a regular file" in str(result.exception) or
-            "is not a regular file" in result.output)
+    assert "is not a regular file" in _error_text(result)
 
 
 @pytest.mark.skipif(not hasattr(socket, "AF_UNIX"), reason="Unix sockets not available")
@@ -575,8 +590,7 @@ def test_socket_rejected(cli_runner, tmp_path, monkeypatch):
 
     result = cli_runner.invoke(cli_module.cli, [str(socket_path)])
     assert result.exit_code != 0
-    assert ("is not a regular file" in str(result.exception) or
-            "is not a regular file" in result.output)
+    assert "is not a regular file" in _error_text(result)
 
 
 def test_mocked_character_device_rejected(cli_runner, tmp_path, monkeypatch):
@@ -587,6 +601,7 @@ def test_mocked_character_device_rejected(cli_runner, tmp_path, monkeypatch):
 
     # Mock os.stat to return character device mode
     original_stat = os.stat
+
     def mock_stat(path, *args, **kwargs):
         result = original_stat(path, *args, **kwargs)
         if str(path) == str(device_path):
@@ -598,10 +613,11 @@ def test_mocked_character_device_rejected(cli_runner, tmp_path, monkeypatch):
                 st_mtime_ns = result.st_mtime_ns
                 st_atime = result.st_atime
                 st_atime_ns = result.st_atime_ns
-                st_uid = result.st_uid if hasattr(result, 'st_uid') else 0
-                st_gid = result.st_gid if hasattr(result, 'st_gid') else 0
-                st_ino = result.st_ino if hasattr(result, 'st_ino') else 0
-                st_dev = result.st_dev if hasattr(result, 'st_dev') else 0
+                st_uid = result.st_uid if hasattr(result, "st_uid") else 0
+                st_gid = result.st_gid if hasattr(result, "st_gid") else 0
+                st_ino = result.st_ino if hasattr(result, "st_ino") else 0
+                st_dev = result.st_dev if hasattr(result, "st_dev") else 0
+
             return MockStatResult()
         return result
 
@@ -609,8 +625,7 @@ def test_mocked_character_device_rejected(cli_runner, tmp_path, monkeypatch):
 
     result = cli_runner.invoke(cli_module.cli, [str(device_path)])
     assert result.exit_code != 0
-    assert ("is not a regular file" in str(result.exception) or
-            "is not a regular file" in result.output)
+    assert "is not a regular file" in _error_text(result)
 
 
 def test_mocked_block_device_rejected(cli_runner, tmp_path, monkeypatch):
@@ -621,6 +636,7 @@ def test_mocked_block_device_rejected(cli_runner, tmp_path, monkeypatch):
 
     # Mock os.stat to return block device mode
     original_stat = os.stat
+
     def mock_stat(path, *args, **kwargs):
         result = original_stat(path, *args, **kwargs)
         if str(path) == str(device_path):
@@ -632,10 +648,11 @@ def test_mocked_block_device_rejected(cli_runner, tmp_path, monkeypatch):
                 st_mtime_ns = result.st_mtime_ns
                 st_atime = result.st_atime
                 st_atime_ns = result.st_atime_ns
-                st_uid = result.st_uid if hasattr(result, 'st_uid') else 0
-                st_gid = result.st_gid if hasattr(result, 'st_gid') else 0
-                st_ino = result.st_ino if hasattr(result, 'st_ino') else 0
-                st_dev = result.st_dev if hasattr(result, 'st_dev') else 0
+                st_uid = result.st_uid if hasattr(result, "st_uid") else 0
+                st_gid = result.st_gid if hasattr(result, "st_gid") else 0
+                st_ino = result.st_ino if hasattr(result, "st_ino") else 0
+                st_dev = result.st_dev if hasattr(result, "st_dev") else 0
+
             return MockStatResult()
         return result
 
@@ -643,5 +660,4 @@ def test_mocked_block_device_rejected(cli_runner, tmp_path, monkeypatch):
 
     result = cli_runner.invoke(cli_module.cli, [str(device_path)])
     assert result.exit_code != 0
-    assert ("is not a regular file" in str(result.exception) or
-            "is not a regular file" in result.output)
+    assert "is not a regular file" in _error_text(result)

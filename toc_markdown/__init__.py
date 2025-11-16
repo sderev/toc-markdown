@@ -16,6 +16,7 @@ Library Usage:
     toc_text = "".join(toc_lines)
 """
 
+from .exceptions import LineTooLongError, ParseError, TooManyHeadersError
 from .generator import generate_toc_entries, validate_toc_markers
 from .models import ParseResult
 from .parser import parse_markdown, strip_markdown_links
@@ -33,6 +34,10 @@ __all__ = [
     "ParseResult",
     # Utilities
     "validate_toc_markers",
+    # Exceptions
+    "LineTooLongError",
+    "ParseError",
+    "TooManyHeadersError",
     # Version
     "__version__",
 ]

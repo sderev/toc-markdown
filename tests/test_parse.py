@@ -4,7 +4,6 @@ import textwrap
 from pathlib import Path
 
 import pytest
-
 from toc_markdown.cli import (
     CODE_FENCE,
     DEFAULT_MAX_LINE_LENGTH,

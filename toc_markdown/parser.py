@@ -11,6 +11,7 @@ from .constants import (
     TOC_HEADER,
     TOC_START_MARKER,
 )
+from .exceptions import LineTooLongError, TooManyHeadersError
 from .models import ParseResult
 
 
@@ -70,7 +71,6 @@ def find_inline_code_spans(text: str) -> list[tuple[int, int]]:
             while i < len(text):
                 if text[i] == "`" and not is_escaped(text, i):
                     # Count closing backticks (non-escaped)
-                    close_start = i
                     close_count = 0
                     while i < len(text) and text[i] == "`":
                         close_count += 1
@@ -135,15 +135,22 @@ def strip_markdown_links(text: str) -> str:
         # Look for '[' that starts a potential link or image
         if text_with_placeholders[i] == "[" and not is_escaped(text_with_placeholders, i):
             # Check if this is preceded by escaped !, which means the entire ![...](...) should be preserved
-            if i > 0 and text_with_placeholders[i - 1] == "!" and is_escaped(text_with_placeholders, i - 1):
+            if (
+                i > 0
+                and text_with_placeholders[i - 1] == "!"
+                and is_escaped(text_with_placeholders, i - 1)
+            ):
                 # Skip this [ since the \! means the whole sequence should be literal
                 result.append(text_with_placeholders[i])
                 i += 1
                 continue
 
             # Check if this is an image (preceded by non-escaped !)
-            is_image = i > 0 and text_with_placeholders[i - 1] == "!" and not is_escaped(text_with_placeholders, i - 1)
-            image_start = i - 1 if is_image else i
+            is_image = (
+                i > 0
+                and text_with_placeholders[i - 1] == "!"
+                and not is_escaped(text_with_placeholders, i - 1)
+            )
 
             # Find the matching ']', handling nested brackets and escaped characters
             j = i + 1
@@ -175,14 +182,19 @@ def strip_markdown_links(text: str) -> str:
                         # Find matching '>' and skip parenthesis balancing
                         k += 1
                         while k < len(text_with_placeholders) and text_with_placeholders[k] != ">":
-                            if text_with_placeholders[k] == "\\" and k + 1 < len(text_with_placeholders):
+                            if text_with_placeholders[k] == "\\" and k + 1 < len(
+                                text_with_placeholders
+                            ):
                                 k += 2  # Skip escaped character
                             else:
                                 k += 1
                         if k < len(text_with_placeholders) and text_with_placeholders[k] == ">":
                             k += 1  # Skip the '>'
                             # Now look for the closing ')'
-                            while k < len(text_with_placeholders) and text_with_placeholders[k] in " \t":
+                            while (
+                                k < len(text_with_placeholders)
+                                and text_with_placeholders[k] in " \t"
+                            ):
                                 k += 1  # Skip optional whitespace
                             if k < len(text_with_placeholders) and text_with_placeholders[k] == ")":
                                 k += 1  # Skip the ')'
@@ -196,7 +208,9 @@ def strip_markdown_links(text: str) -> str:
                         # Regular URL without angle brackets
                         paren_depth = 1
                         while k < len(text_with_placeholders) and paren_depth > 0:
-                            if text_with_placeholders[k] == "\\" and k + 1 < len(text_with_placeholders):
+                            if text_with_placeholders[k] == "\\" and k + 1 < len(
+                                text_with_placeholders
+                            ):
                                 # Skip escaped character (e.g., \) or \()
                                 k += 2
                             elif text_with_placeholders[k] == "(":
@@ -221,7 +235,9 @@ def strip_markdown_links(text: str) -> str:
                     k = j + 1
                     # Find the matching ']'
                     while k < len(text_with_placeholders) and text_with_placeholders[k] != "]":
-                        if text_with_placeholders[k] == "\\" and k + 1 < len(text_with_placeholders):
+                        if text_with_placeholders[k] == "\\" and k + 1 < len(
+                            text_with_placeholders
+                        ):
                             k += 2  # Skip escaped character
                         else:
                             k += 1
@@ -282,7 +298,8 @@ def parse_markdown(content: str, max_line_length: int = 10_000) -> ParseResult:
         ParseResult: Parsed markdown with headers and TOC marker positions.
 
     Raises:
-        ValueError: If content violates constraints (line too long, too many headers).
+        LineTooLongError: If a line exceeds max_line_length.
+        TooManyHeadersError: If the document has more headers than allowed.
     """
     full_file = content.splitlines(keepends=True)
 
@@ -301,8 +318,13 @@ def parse_markdown(content: str, max_line_length: int = 10_000) -> ParseResult:
             indent_columns = _leading_whitespace_columns(line)
             stripped_line = line.lstrip(" \t")
             if stripped_line and stripped_line[0] == precomp_fence_char:
-                fence_run_length = len(stripped_line) - len(stripped_line.lstrip(precomp_fence_char))
-                if fence_run_length >= precomp_fence_length and stripped_line[fence_run_length:].strip() == "":
+                fence_run_length = len(stripped_line) - len(
+                    stripped_line.lstrip(precomp_fence_char)
+                )
+                if (
+                    fence_run_length >= precomp_fence_length
+                    and stripped_line[fence_run_length:].strip() == ""
+                ):
                     additional_indent = indent_columns - precomp_fence_indent_columns
                     if additional_indent <= CLOSING_FENCE_MAX_INDENT:
                         precomp_fence_char = None
@@ -358,7 +380,10 @@ def parse_markdown(content: str, max_line_length: int = 10_000) -> ParseResult:
 
             fence_run_length = len(stripped_line) - len(stripped_line.lstrip(code_fence_char))
 
-            if fence_run_length >= code_fence_length and stripped_line[fence_run_length:].strip() == "":
+            if (
+                fence_run_length >= code_fence_length
+                and stripped_line[fence_run_length:].strip() == ""
+            ):
                 additional_indent = indent_columns - code_fence_indent_columns
                 if additional_indent <= CLOSING_FENCE_MAX_INDENT:
                     code_fence_char = None
@@ -388,11 +413,7 @@ def parse_markdown(content: str, max_line_length: int = 10_000) -> ParseResult:
             is_in_indented_code_block = False
 
         # Ignores code blocks and existing TOC header line
-        if (
-            code_fence_char is not None
-            or is_in_indented_code_block
-            or line.startswith(TOC_HEADER)
-        ):
+        if code_fence_char is not None or is_in_indented_code_block or line.startswith(TOC_HEADER):
             continue
 
         # Enforce line length outside TOC sections
@@ -403,10 +424,7 @@ def parse_markdown(content: str, max_line_length: int = 10_000) -> ParseResult:
                 if line_len > 0 and line[line_len - 1] == "\r":
                     line_len -= 1
             if line_len > max_line_length:
-                raise ValueError(
-                    f"Line {line_number + 1} exceeds maximum allowed length "
-                    f"of {max_line_length} characters"
-                )
+                raise LineTooLongError(line_number + 1, max_line_length)
 
         # Finds headers
         header_match = HEADER_PATTERN.match(line)
@@ -415,7 +433,7 @@ def parse_markdown(content: str, max_line_length: int = 10_000) -> ParseResult:
 
             # Check header count limit
             if len(headers) > MAX_HEADERS:
-                raise ValueError(f"Too many headers (limit: {MAX_HEADERS})")
+                raise TooManyHeadersError(MAX_HEADERS)
 
         # Finds TOC start and end line numbers
         if line.startswith(TOC_START_MARKER):

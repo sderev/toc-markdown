@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from toc_markdown.cli import generate_slug
 
 

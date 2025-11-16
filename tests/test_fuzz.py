@@ -3,10 +3,9 @@ from __future__ import annotations
 import os
 
 import pytest
+from toc_markdown.cli import TOC_END_MARKER, TOC_START_MARKER, generate_slug, generate_toc
 
 atheris = pytest.importorskip("atheris")
-
-from toc_markdown.cli import TOC_END_MARKER, TOC_START_MARKER, generate_slug, generate_toc
 
 
 def test_generate_slug_with_fuzzed_input():
