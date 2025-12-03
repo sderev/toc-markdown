@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from pathlib import Path
 import tomllib
 
-
 @dataclass
 class TocConfig:
     """Configuration for TOC generation."""
@@ -85,3 +84,59 @@ def load_config(search_path: Path) -> TocConfig:
         current = parent
 
     return TocConfig()
+
+
+def validate_config(config: TocConfig) -> None:
+    """Validate configuration values."""
+
+    _ensure_integers(
+        {
+            "min_level": config.min_level,
+            "max_level": config.max_level,
+            "max_file_size": config.max_file_size,
+            "max_line_length": config.max_line_length,
+            "max_headers": config.max_headers,
+        }
+    )
+
+    if config.min_level < 1:
+        raise ConfigError("`min_level` must be >= 1")
+    if config.max_level < config.min_level:
+        raise ConfigError("`max_level` must be >= `min_level`")
+    if config.max_level > 6:
+        raise ConfigError("`max_level` must be <= 6")
+
+    if not config.start_marker:
+        raise ConfigError("`start_marker` must not be empty")
+    if not config.end_marker:
+        raise ConfigError("`end_marker` must not be empty")
+    if not config.header_text:
+        raise ConfigError("`header_text` must not be empty")
+
+    if not config.indent_chars:
+        raise ConfigError("`indent_chars` must not be empty")
+    if config.list_style not in ("1.", "*", "-"):
+        raise ConfigError("`list_style` must be one of: 1., *, -")
+
+    try:
+        _ensure_positive(
+            {
+                "max_file_size": config.max_file_size,
+                "max_line_length": config.max_line_length,
+                "max_headers": config.max_headers,
+            }
+        )
+    except TypeError as error:
+        raise ConfigError("numeric limits must be positive integers") from error
+
+
+def _ensure_positive(values: dict[str, int]) -> None:
+    for key, value in values.items():
+        if value <= 0:
+            raise ConfigError(f"`{key}` must be a positive integer")
+
+
+def _ensure_integers(values: dict[str, object]) -> None:
+    for key, value in values.items():
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ConfigError(f"`{key}` must be an integer")

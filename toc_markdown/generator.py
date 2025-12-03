@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from .constants import MAX_TOC_SECTION_LINES, TOC_END_MARKER, TOC_START_MARKER
+from .config import TocConfig, validate_config
 from .parser import strip_markdown_links
 from .slugify import generate_slug
 
 
-def generate_toc_entries(headers: list[str]) -> list[str]:
+def generate_toc_entries(headers: list[str], config: TocConfig | None = None) -> list[str]:
     """
     Generates a table of contents from a list of headers.
 
@@ -22,7 +22,10 @@ def generate_toc_entries(headers: list[str]) -> list[str]:
     Returns:
         list: A list of lines that make up the TOC.
     """
-    toc = [f"{TOC_START_MARKER}\n", "## Table of Contents\n\n"]
+    config = config or TocConfig()
+    validate_config(config)
+
+    toc = [f"{config.start_marker}\n", f"{config.header_text}\n\n"]
 
     # Hybrid approach for duplicate slug handling:
     # - slug_counters: O(1) lookup for the next available counter for each base slug
@@ -67,15 +70,21 @@ def generate_toc_entries(headers: list[str]) -> list[str]:
         slug_counters[base_slug] = count + 1
         used_slugs.add(link)
 
-        toc.append("    " * (level - 2) + f"1. [{title}](#{link})" + "\n")
+        indent = config.indent_chars * max(level - config.min_level, 0)
+        toc.append(f"{indent}{config.list_style} [{title}](#{link})\n")
 
-    toc.append(f"{TOC_END_MARKER}" + "\n")
+    toc.append(f"{config.end_marker}\n")
 
     return toc
 
 
-def validate_toc_markers(toc_start_line: int, toc_end_line: int) -> None:
+def validate_toc_markers(
+    toc_start_line: int, toc_end_line: int, config: TocConfig | None = None
+) -> None:
     """Ensure TOC markers are sane before mutating the file."""
+
+    config = config or TocConfig()
+    validate_config(config)
 
     if toc_start_line >= toc_end_line:
         raise ValueError(
@@ -86,5 +95,6 @@ def validate_toc_markers(toc_start_line: int, toc_end_line: int) -> None:
         )
 
     toc_size = toc_end_line - toc_start_line
-    if toc_size > MAX_TOC_SECTION_LINES:
+    max_toc_lines = config.max_headers + 100
+    if toc_size > max_toc_lines:
         raise ValueError(f"TOC section is suspiciously large ({toc_size} lines)")

@@ -11,6 +11,7 @@ from toc_markdown.cli import (
     TOC_START_MARKER,
     parse_file,
 )
+from toc_markdown.config import TocConfig
 from toc_markdown.parser import parse_markdown
 
 
@@ -310,3 +311,26 @@ def test_parse_markdown_rejects_overindented_closing_fence():
     result = parse_markdown(content)
 
     assert result.headers == []
+
+
+def test_parse_markdown_respects_configured_levels():
+    content = "\n".join(
+        [
+            "# Heading 1",
+            "## Heading 2",
+            "### Heading 3",
+            "#### Heading 4",
+            "##### Heading 5",
+            "",
+        ]
+    )
+    config = TocConfig(min_level=1, max_level=4)
+
+    result = parse_markdown(content, config=config)
+
+    assert result.headers == [
+        "# Heading 1",
+        "## Heading 2",
+        "### Heading 3",
+        "#### Heading 4",
+    ]

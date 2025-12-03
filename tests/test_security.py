@@ -543,8 +543,8 @@ def test_race_condition_detection(cli_runner, tmp_path, monkeypatch):
 
     original_parse = cli_module.parse_file
 
-    def _parse_and_mutate(path: Path, max_line_length: int):
-        result = original_parse(path, max_line_length)
+    def _parse_and_mutate(path: Path, max_line_length: int, config=None):
+        result = original_parse(path, max_line_length, config)
         existing = path.read_text(encoding="utf-8")
         path.write_text(existing + "\n## Mutated\n", encoding="utf-8")
         return result

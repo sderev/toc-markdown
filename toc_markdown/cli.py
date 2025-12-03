@@ -12,11 +12,13 @@ from pathlib import Path
 from typing import TextIO
 
 import click
+from dataclasses import replace
 
+from .config import ConfigError, TocConfig, load_config, validate_config
 from .constants import (
     CLOSING_FENCE_MAX_INDENT,
     CODE_FENCE_PATTERN,
-    HEADER_PATTERN,
+    DEFAULT_CONFIG,
     MAX_HEADERS,
     MAX_TOC_SECTION_LINES,
     TOC_END_MARKER,
@@ -32,9 +34,9 @@ from .slugify import generate_slug
 MARKDOWN_EXTENSIONS = (".md", ".markdown")
 CODE_FENCE = "```"
 MAX_FILE_SIZE_ENV_VAR = "TOC_MARKDOWN_MAX_FILE_SIZE"
-DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MiB
+DEFAULT_MAX_FILE_SIZE = DEFAULT_CONFIG.max_file_size
 MAX_LINE_LENGTH_ENV_VAR = "TOC_MARKDOWN_MAX_LINE_LENGTH"
-DEFAULT_MAX_LINE_LENGTH = 10_000
+DEFAULT_MAX_LINE_LENGTH = DEFAULT_CONFIG.max_line_length
 
 __all__ = [
     "cli",
@@ -50,17 +52,48 @@ __all__ = [
     "TOC_HEADER",
     "CODE_FENCE",
     "MAX_TOC_SECTION_LINES",
-    "HEADER_PATTERN",
     "CODE_FENCE_PATTERN",
     "CLOSING_FENCE_MAX_INDENT",
     "MAX_HEADERS",
 ]
 
 
+def apply_overrides(config: TocConfig, **overrides: object) -> TocConfig:
+    """Apply CLI overrides to configuration."""
+    changes = {key: value for key, value in overrides.items() if value is not None}
+    if not changes:
+        return config
+    return replace(config, **changes)
+
+
+def build_config(search_path: Path, **overrides: object) -> TocConfig:
+    """Load configuration from disk and apply CLI overrides."""
+    config = load_config(search_path)
+    config = apply_overrides(config, **overrides)
+    validate_config(config)
+    return config
+
+
 @click.command()
 @click.version_option()
+@click.option("--start-marker", help="TOC start marker")
+@click.option("--end-marker", help="TOC end marker")
+@click.option("--header-text", help="TOC header text")
+@click.option("--min-level", type=int, help="Minimum header level")
+@click.option("--max-level", type=int, help="Maximum header level")
+@click.option("--indent-chars", help="Indentation characters")
+@click.option("--list-style", type=click.Choice(["1.", "*", "-"]), help="List style (1. or * or -)")
 @click.argument("filepath", type=click.Path(exists=True, dir_okay=False))
-def cli(filepath: str):
+def cli(
+    filepath: str,
+    start_marker: str | None = None,
+    end_marker: str | None = None,
+    header_text: str | None = None,
+    min_level: int | None = None,
+    max_level: int | None = None,
+    indent_chars: str | None = None,
+    list_style: str | None = None,
+):
     """
     Generates or updates the table of contents for the specified Markdown file.
 
@@ -70,20 +103,36 @@ def cli(filepath: str):
     """
     base_dir = Path.cwd().resolve()
     filepath = normalize_filepath(filepath, base_dir)
-    max_file_size = get_max_file_size()
-    max_line_length = get_max_line_length()
+    try:
+        config = build_config(
+            filepath.parent,
+            start_marker=start_marker,
+            end_marker=end_marker,
+            header_text=header_text,
+            min_level=min_level,
+            max_level=max_level,
+            indent_chars=indent_chars,
+            list_style=list_style,
+        )
+    except ConfigError as error:
+        raise click.BadParameter(str(error)) from error
+
+    max_file_size = get_max_file_size(default=config.max_file_size)
+    max_line_length = get_max_line_length(default=config.max_line_length)
     initial_stat = collect_file_stat(filepath)
     enforce_file_size(initial_stat, max_file_size, filepath)
 
-    full_file, headers, toc_start_line, toc_end_line = parse_file(filepath, max_line_length)
+    full_file, headers, toc_start_line, toc_end_line = parse_file(
+        filepath, max_line_length, config
+    )
     post_parse_stat = collect_file_stat(filepath)
     ensure_file_unchanged(initial_stat, post_parse_stat, filepath)
-    toc = generate_toc(headers)
+    toc = generate_toc(headers, config)
 
     # Updates TOC
     if toc_start_line is not None and toc_end_line is not None:
         try:
-            validate_toc_markers(toc_start_line, toc_end_line)
+            validate_toc_markers(toc_start_line, toc_end_line, config)
         except ValueError as error:
             raise click.BadParameter(str(error)) from error
         update_toc(
@@ -94,7 +143,7 @@ def cli(filepath: str):
         print("".join(toc), end="")
 
 
-def get_max_file_size() -> int:
+def get_max_file_size(default: int = DEFAULT_MAX_FILE_SIZE) -> int:
     """
     Returns the maximum file size allowed for processing.
 
@@ -102,7 +151,7 @@ def get_max_file_size() -> int:
     """
     env_value = os.environ.get(MAX_FILE_SIZE_ENV_VAR)
     if env_value is None:
-        return DEFAULT_MAX_FILE_SIZE
+        return default
 
     try:
         max_size = int(env_value)
@@ -123,7 +172,7 @@ def get_max_file_size() -> int:
     return max_size
 
 
-def get_max_line_length() -> int:
+def get_max_line_length(default: int = DEFAULT_MAX_LINE_LENGTH) -> int:
     """
     Returns the maximum line length allowed for processing.
 
@@ -131,7 +180,7 @@ def get_max_line_length() -> int:
     """
     env_value = os.environ.get(MAX_LINE_LENGTH_ENV_VAR)
     if env_value is None:
-        return DEFAULT_MAX_LINE_LENGTH
+        return default
 
     try:
         max_length = int(env_value)
@@ -288,7 +337,9 @@ def safe_read(filepath: Path) -> TextIO:
 
 
 def parse_file(
-    filepath: Path, max_line_length: int = DEFAULT_MAX_LINE_LENGTH
+    filepath: Path,
+    max_line_length: int | None = None,
+    config: TocConfig | None = None,
 ) -> tuple[list[str], list[str], int | None, int | None]:
     """
     Parses the specified Markdown file.
@@ -306,6 +357,16 @@ def parse_file(
             - toc_start_line: The line number where the TOC starts, or None if not found.
             - toc_end_line: The line number where the TOC ends, or None if not found.
     """
+    config = config or TocConfig()
+    try:
+        validate_config(config)
+    except ConfigError as error:
+        raise click.ClickException(str(error)) from error
+
+    effective_max_line_length = (
+        config.max_line_length if max_line_length is None else max_line_length
+    )
+
     # Read file content
     try:
         with safe_read(filepath) as file:
@@ -316,7 +377,7 @@ def parse_file(
 
     # Parse content using pure function
     try:
-        result = parse_markdown(content, max_line_length)
+        result = parse_markdown(content, effective_max_line_length, config)
     except LineTooLongError as error:
         error_message = (
             f"{click.style(str(filepath), fg='red')} contains a line at line {error.line_number} "

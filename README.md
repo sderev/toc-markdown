@@ -44,6 +44,34 @@ pip install toc-markdown
 * Files must be valid UTF-8. Invalid byte sequences abort processing to avoid corrupt output.
 * Updates happen through a temporary file in the same directory; contents are flushed, synced, and atomically swapped while preserving permissions.
 
+## Configuration
+
+`toc-markdown` reads settings from `[tool.toc-markdown]` in `pyproject.toml`, starting from the target file's directory and walking up the tree. CLI flags override the file, and environment variables still control the size and line-length caps.
+
+Example:
+
+```toml
+[tool.toc-markdown]
+start_marker = "<!-- TOC -->"
+end_marker = "<!-- /TOC -->"
+header_text = "## Table of Contents"
+min_level = 2
+max_level = 3
+indent_chars = "    "
+list_style = "1."
+max_file_size = 10485760
+max_line_length = 10000
+max_headers = 10000
+```
+
+CLI overrides:
+
+* `--start-marker`, `--end-marker`, `--header-text`
+* `--min-level`, `--max-level`
+* `--indent-chars`, `--list-style` (`1.`, `*`, or `-`)
+
+Priority: CLI flags > `pyproject.toml` > defaults. For size caps, `TOC_MARKDOWN_MAX_FILE_SIZE` and `TOC_MARKDOWN_MAX_LINE_LENGTH` still take precedence.
+
 ## Integration with Vim
 
 Add the following line to your `.vimrc` file:

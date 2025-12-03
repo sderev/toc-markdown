@@ -3,6 +3,7 @@ from __future__ import annotations
 import textwrap
 from pathlib import Path
 
+import toc_markdown.cli as cli_module
 from toc_markdown.cli import (
     MAX_TOC_SECTION_LINES,
     TOC_END_MARKER,
@@ -14,6 +15,12 @@ from toc_markdown.cli import (
 def _write(tmp_path: Path, filename: str, content: str) -> Path:
     path = tmp_path / filename
     path.write_text(textwrap.dedent(content).lstrip(), encoding="utf-8")
+    return path
+
+
+def _write_pyproject(base: Path, body: str) -> Path:
+    path = base / "pyproject.toml"
+    path.write_text(textwrap.dedent(body).lstrip(), encoding="utf-8")
     return path
 
 
@@ -117,3 +124,88 @@ def test_cli_rejects_unreasonably_large_toc(cli_runner, tmp_path, monkeypatch):
 
     assert result.exit_code != 0
     assert "TOC section is suspiciously large" in result.output
+
+
+def test_cli_reads_config_from_pyproject(cli_runner, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _write_pyproject(
+        tmp_path,
+        """
+        [tool.toc-markdown]
+        start_marker = "<!-- CUSTOM -->"
+        end_marker = "<!-- /CUSTOM -->"
+        header_text = "# Contents"
+        min_level = 1
+        indent_chars = ">>"
+        list_style = "*"
+        """,
+    )
+    target = _write(
+        tmp_path,
+        "configured.md",
+        """
+        # Top
+        ## Inner
+        """,
+    )
+
+    result = cli_runner.invoke(cli, [str(target)])
+
+    assert result.exit_code == 0
+    assert result.output.startswith("<!-- CUSTOM -->\n")
+    assert "# Contents" in result.output
+    assert ">>* [Inner](#inner)\n" in result.output
+
+
+def test_cli_flags_override_config(cli_runner, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _write_pyproject(
+        tmp_path,
+        """
+        [tool.toc-markdown]
+        start_marker = "<!-- CONFIG -->"
+        end_marker = "<!-- /CONFIG -->"
+        header_text = "# Config TOC"
+        min_level = 3
+        indent_chars = "    "
+        list_style = "*"
+        """,
+    )
+    target = _write(
+        tmp_path,
+        "override.md",
+        """
+        ## Heading
+        ### Child
+        """,
+    )
+
+    result = cli_runner.invoke(
+        cli,
+        [
+            "--start-marker",
+            "<!-- CLI -->",
+            "--end-marker",
+            "<!-- /CLI -->",
+            "--header-text",
+            "# CLI TOC",
+            "--min-level",
+            "2",
+            "--list-style",
+            "-",
+            "--indent-chars",
+            "\t",
+            str(target),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert result.output.startswith("<!-- CLI -->\n")
+    assert result.output.splitlines()[1] == "# CLI TOC"
+    assert "- [Heading](#heading)\n" in result.output
+    assert "\t- [Child](#child)\n" in result.output
+    assert result.output.rstrip().endswith("<!-- /CLI -->")
+
+
+def test_cli_public_api_excludes_header_pattern():
+    assert "HEADER_PATTERN" not in cli_module.__all__

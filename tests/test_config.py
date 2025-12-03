@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import textwrap
+import pytest
 from pathlib import Path
 
-import pytest
-
-from toc_markdown.config import ConfigError, TocConfig, load_config
+from toc_markdown.config import ConfigError, TocConfig, load_config, validate_config
 
 
 def _write_pyproject(base: Path, body: str) -> Path:
@@ -143,3 +142,39 @@ def test_partial_config_merges_with_defaults(tmp_path: Path):
     defaults = TocConfig()
     assert config.start_marker == defaults.start_marker
     assert config.indent_chars == defaults.indent_chars
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        TocConfig(min_level=0),
+        TocConfig(min_level=3, max_level=2),
+        TocConfig(max_level=7),
+        TocConfig(start_marker=""),
+        TocConfig(end_marker=""),
+        TocConfig(header_text=""),
+        TocConfig(indent_chars=""),
+        TocConfig(list_style="?"),
+        TocConfig(max_file_size=0),
+        TocConfig(max_line_length=-1),
+        TocConfig(max_headers=0),
+    ],
+)
+def test_validate_config_rejects_invalid_values(config: TocConfig):
+    with pytest.raises(ConfigError):
+        validate_config(config)
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        TocConfig(max_file_size="big"),  # type: ignore[arg-type]
+        TocConfig(max_line_length="long"),  # type: ignore[arg-type]
+        TocConfig(max_headers="many"),  # type: ignore[arg-type]
+        TocConfig(min_level="2"),  # type: ignore[arg-type]
+        TocConfig(max_level="3"),  # type: ignore[arg-type]
+    ],
+)
+def test_validate_config_rejects_non_numeric_limits(config: TocConfig):
+    with pytest.raises(ConfigError):
+        validate_config(config)

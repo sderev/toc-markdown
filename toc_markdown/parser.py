@@ -2,15 +2,10 @@
 
 from __future__ import annotations
 
-from .constants import (
-    CLOSING_FENCE_MAX_INDENT,
-    CODE_FENCE_PATTERN,
-    HEADER_PATTERN,
-    MAX_HEADERS,
-    TOC_END_MARKER,
-    TOC_HEADER,
-    TOC_START_MARKER,
-)
+import re
+
+from .config import TocConfig, validate_config
+from .constants import CLOSING_FENCE_MAX_INDENT, CODE_FENCE_PATTERN
 from .exceptions import LineTooLongError, TooManyHeadersError
 from .models import ParseResult, ParserContext, ParserState
 
@@ -367,7 +362,9 @@ def _try_exit_indented_code(ctx: ParserContext, line: str) -> bool:
     return False
 
 
-def parse_markdown(content: str, max_line_length: int = 10_000) -> ParseResult:
+def parse_markdown(
+    content: str, max_line_length: int | None = None, config: TocConfig | None = None
+) -> ParseResult:
     """
     Parses markdown content and extracts headers and TOC markers.
 
@@ -376,7 +373,8 @@ def parse_markdown(content: str, max_line_length: int = 10_000) -> ParseResult:
 
     Args:
         content (str): The markdown content to parse.
-        max_line_length (int): Maximum allowed line length (excluding line endings).
+        max_line_length (int | None): Override maximum allowed line length (excluding line endings).
+        config (TocConfig | None): Configuration to use. Defaults to TocConfig().
 
     Returns:
         ParseResult: Parsed markdown with headers and TOC marker positions.
@@ -385,6 +383,13 @@ def parse_markdown(content: str, max_line_length: int = 10_000) -> ParseResult:
         LineTooLongError: If a line exceeds max_line_length.
         TooManyHeadersError: If the document has more headers than allowed.
     """
+    config = config or TocConfig()
+    validate_config(config)
+    effective_max_line_length = (
+        config.max_line_length if max_line_length is None else max_line_length
+    )
+    header_pattern = re.compile(rf"^(#{{{config.min_level},{config.max_level}}}) (.*)$")
+
     full_file = content.splitlines(keepends=True)
 
     # Pre-compute TOC coverage so we only skip validated sections.
@@ -404,9 +409,9 @@ def parse_markdown(content: str, max_line_length: int = 10_000) -> ParseResult:
             continue
 
         # Only detect TOC markers outside code blocks
-        if line.startswith(TOC_START_MARKER):
+        if line.startswith(config.start_marker):
             toc_stack.append(line_number)
-        if line.startswith(TOC_END_MARKER) and toc_stack:
+        if line.startswith(config.end_marker) and toc_stack:
             start_index = toc_stack.pop()
             toc_intervals.append((start_index, line_number))
 
@@ -445,7 +450,7 @@ def parse_markdown(content: str, max_line_length: int = 10_000) -> ParseResult:
             continue
 
         # Ignores code blocks and existing TOC header line
-        if ctx.state is not ParserState.NORMAL or line.startswith(TOC_HEADER):
+        if ctx.state is not ParserState.NORMAL or line.startswith(config.header_text):
             continue
 
         # Enforce line length outside TOC sections
@@ -455,22 +460,22 @@ def parse_markdown(content: str, max_line_length: int = 10_000) -> ParseResult:
                 line_len -= 1
                 if line_len > 0 and line[line_len - 1] == "\r":
                     line_len -= 1
-            if line_len > max_line_length:
-                raise LineTooLongError(line_number + 1, max_line_length)
+            if line_len > effective_max_line_length:
+                raise LineTooLongError(line_number + 1, effective_max_line_length)
 
         # Finds headers
-        header_match = HEADER_PATTERN.match(line)
+        header_match = header_pattern.match(line)
         if header_match:
             headers.append(header_match.group(0))
 
             # Check header count limit
-            if len(headers) > MAX_HEADERS:
-                raise TooManyHeadersError(MAX_HEADERS)
+            if len(headers) > config.max_headers:
+                raise TooManyHeadersError(config.max_headers)
 
         # Finds TOC start and end line numbers
-        if line.startswith(TOC_START_MARKER):
+        if line.startswith(config.start_marker):
             toc_start_line = line_number
-        if line.startswith(TOC_END_MARKER):
+        if line.startswith(config.end_marker):
             toc_end_line = line_number
 
     return ParseResult(

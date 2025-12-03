@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from toc_markdown.cli import TOC_END_MARKER, TOC_START_MARKER, generate_toc
+from toc_markdown.config import TocConfig
 
 
 def test_generate_toc_for_simple_headers():
@@ -197,6 +198,26 @@ def test_generate_toc_escaped_bracket_in_link_text():
     toc = generate_toc(headers)
 
     assert "1. [Example [Label \\]]](#example-label)\n" in toc
+
+
+def test_generate_toc_honors_config_options():
+    headers = ["# Root", "## Child"]
+    config = TocConfig(
+        start_marker="<!-- BEGIN -->",
+        end_marker="<!-- END -->",
+        header_text="### Index",
+        min_level=1,
+        indent_chars=">>",
+        list_style="*",
+    )
+
+    toc = generate_toc(headers, config)
+
+    assert toc[0] == "<!-- BEGIN -->\n"
+    assert toc[1] == "### Index\n\n"
+    assert toc[2] == "* [Root](#root)\n"
+    assert toc[3] == ">>* [Child](#child)\n"
+    assert toc[-1] == "<!-- END -->\n"
 
 
 def test_generate_toc_escaped_opening_bracket():
