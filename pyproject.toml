@@ -11,7 +11,7 @@ license = {text = "Apache Licence, Version 2.0"}
 authors = [
     {name = "Sébastien De Revière"}
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "click",
 ]
@@ -31,7 +31,7 @@ dev = [
     "hypothesis>=6.0",
 ]
 
-# Fuzz testing with atheris (Python 3.10-3.11 only)
+# Fuzz testing with atheris (Python 3.11 only)
 # atheris 2.3.0 is incompatible with Python 3.12+ due to removed opcodes
 fuzz = [
     "atheris>=2.3.0; python_version < '3.12'",

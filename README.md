@@ -23,7 +23,7 @@ This tool scans Markdown files to detect headers and subsequently creates a Tabl
 
 ## Installation
 
-**Requirements**: Python 3.10+
+**Requirements**: Python 3.11+
 
 To install, use `uv` (recommended) or `pip`:
 
@@ -73,13 +73,12 @@ The HTML coverage report is written to `htmlcov/index.html`. The suite currently
 
 ### Fuzz Testing (Optional)
 
-Fuzz tests using atheris are available but only work on Python 3.10-3.11 (atheris 2.3.0 is incompatible with Python 3.12+):
+Fuzz tests using atheris are available but only work on Python 3.11 (atheris 2.3.0 is incompatible with Python 3.12+):
 
 ```shell
-# Install fuzz dependencies (Python 3.10-3.11 only)
+# Install fuzz dependencies (Python 3.11 only)
 uv pip install -e ".[fuzz]"
 
 # Run all tests including fuzz tests
 uv run pytest tests/ --cov=toc_markdown
 ```
-
