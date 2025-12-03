@@ -12,7 +12,7 @@ from .constants import (
     TOC_START_MARKER,
 )
 from .exceptions import LineTooLongError, TooManyHeadersError
-from .models import ParseResult
+from .models import ParseResult, ParserContext, ParserState
 
 
 def is_escaped(text: str, pos: int) -> bool:
@@ -283,6 +283,90 @@ def _leading_whitespace_columns(line: str) -> int:
     return columns
 
 
+def _try_open_fence(ctx: ParserContext, line: str) -> bool:
+    """
+    Try to open a fenced code block. Returns True if the line starts a fence.
+    """
+    if ctx.state is not ParserState.NORMAL:
+        return False
+
+    fence_match = CODE_FENCE_PATTERN.match(line)
+    if not fence_match:
+        return False
+
+    indent_prefix = fence_match.group("indent") or ""
+    indent_columns = _leading_whitespace_columns(indent_prefix)
+    if indent_columns > CLOSING_FENCE_MAX_INDENT:
+        return False
+
+    fence_sequence = fence_match.group("fence")
+    ctx.state = ParserState.IN_FENCED_CODE
+    ctx.fence_char = fence_sequence[0]
+    ctx.fence_length = len(fence_sequence)
+    ctx.fence_indent_columns = indent_columns
+    return True
+
+
+def _try_close_fence(ctx: ParserContext, line: str) -> bool:
+    """
+    Try to close a fenced code block. Returns True if the line closes the current fence.
+    """
+    if ctx.state is not ParserState.IN_FENCED_CODE or ctx.fence_char is None:
+        return False
+
+    indent_columns = _leading_whitespace_columns(line)
+    stripped_line = line.lstrip(" \t")
+    if not stripped_line or stripped_line[0] != ctx.fence_char:
+        return False
+
+    fence_run_length = len(stripped_line) - len(stripped_line.lstrip(ctx.fence_char))
+    if fence_run_length < ctx.fence_length:
+        return False
+
+    if stripped_line[fence_run_length:].strip():
+        return False
+
+    if indent_columns > CLOSING_FENCE_MAX_INDENT:
+        return False
+
+    ctx.state = ParserState.NORMAL
+    ctx.fence_char = None
+    ctx.fence_length = 0
+    ctx.fence_indent_columns = 0
+    return True
+
+
+def _try_enter_indented_code(ctx: ParserContext, line: str) -> bool:
+    """
+    Try to enter an indented code block. Returns True if the line is indented code.
+    """
+    if ctx.state is not ParserState.NORMAL:
+        return False
+
+    if _leading_whitespace_columns(line) >= 4:
+        ctx.state = ParserState.IN_INDENTED_CODE
+        return True
+
+    return False
+
+
+def _try_exit_indented_code(ctx: ParserContext, line: str) -> bool:
+    """
+    Try to exit an indented code block. Returns True when the line should be skipped.
+    """
+    if ctx.state is not ParserState.IN_INDENTED_CODE:
+        return False
+
+    if line.strip() == "":
+        return True
+
+    if _leading_whitespace_columns(line) >= 4:
+        return True
+
+    ctx.state = ParserState.NORMAL
+    return False
+
+
 def parse_markdown(content: str, max_line_length: int = 10_000) -> ParseResult:
     """
     Parses markdown content and extracts headers and TOC markers.
@@ -307,39 +391,16 @@ def parse_markdown(content: str, max_line_length: int = 10_000) -> ParseResult:
     # IMPORTANT: Must track code blocks to avoid detecting markers inside them.
     toc_stack: list[int] = []
     toc_intervals: list[tuple[int, int]] = []
-    precomp_fence_char: str | None = None
-    precomp_fence_length = 0
-    precomp_fence_indent_columns = 0
+    precomp_ctx = ParserContext()
 
     for line_number, line in enumerate(full_file):
         # Check if we're inside a fenced code block
-        if precomp_fence_char is not None:
-            # Try to close the fence
-            indent_columns = _leading_whitespace_columns(line)
-            stripped_line = line.lstrip(" \t")
-            if stripped_line and stripped_line[0] == precomp_fence_char:
-                fence_run_length = len(stripped_line) - len(
-                    stripped_line.lstrip(precomp_fence_char)
-                )
-                if (
-                    fence_run_length >= precomp_fence_length
-                    and stripped_line[fence_run_length:].strip() == ""
-                ):
-                    additional_indent = indent_columns - precomp_fence_indent_columns
-                    if additional_indent <= CLOSING_FENCE_MAX_INDENT:
-                        precomp_fence_char = None
-                        precomp_fence_length = 0
-                        precomp_fence_indent_columns = 0
+        if precomp_ctx.state is ParserState.IN_FENCED_CODE:
+            _try_close_fence(precomp_ctx, line)
             continue
 
         # Check if this line opens a fenced code block
-        fence_match = CODE_FENCE_PATTERN.match(line)
-        if fence_match:
-            fence_sequence = fence_match.group("fence")
-            precomp_fence_char = fence_sequence[0]
-            precomp_fence_length = len(fence_sequence)
-            indent_prefix = fence_match.group("indent") or ""
-            precomp_fence_indent_columns = _leading_whitespace_columns(indent_prefix)
+        if _try_open_fence(precomp_ctx, line):
             continue
 
         # Only detect TOC markers outside code blocks
@@ -364,56 +425,27 @@ def parse_markdown(content: str, max_line_length: int = 10_000) -> ParseResult:
     toc_start_line: int | None = None
     toc_end_line: int | None = None
 
-    # Flags for code blocks
-    code_fence_char: str | None = None
-    code_fence_length = 0
-    code_fence_indent_columns = 0
-    is_in_indented_code_block = False
+    ctx = ParserContext()
 
     for line_number, line in enumerate(full_file):
         # Tracks fenced code blocks (``` or ~~~, including info strings)
-        if code_fence_char is not None:
-            indent_columns = _leading_whitespace_columns(line)
-            stripped_line = line.lstrip(" 	")
-            if not stripped_line or stripped_line[0] != code_fence_char:
-                continue
-
-            fence_run_length = len(stripped_line) - len(stripped_line.lstrip(code_fence_char))
-
-            if (
-                fence_run_length >= code_fence_length
-                and stripped_line[fence_run_length:].strip() == ""
-            ):
-                additional_indent = indent_columns - code_fence_indent_columns
-                if additional_indent <= CLOSING_FENCE_MAX_INDENT:
-                    code_fence_char = None
-                    code_fence_length = 0
-                    code_fence_indent_columns = 0
-
+        if ctx.state is ParserState.IN_FENCED_CODE:
+            _try_close_fence(ctx, line)
             continue
 
-        fence_match = CODE_FENCE_PATTERN.match(line)
-        if fence_match:
-            fence_sequence = fence_match.group("fence")
-            code_fence_char = fence_sequence[0]
-            code_fence_length = len(fence_sequence)
-            indent_prefix = fence_match.group("indent") or ""
-            code_fence_indent_columns = _leading_whitespace_columns(indent_prefix)
-            is_in_indented_code_block = False
+        if ctx.state is ParserState.IN_INDENTED_CODE:
+            if _try_exit_indented_code(ctx, line):
+                continue
+
+        if _try_open_fence(ctx, line):
             continue
 
         # Tracks indented code blocks (any mix totaling 4+ columns)
-        leading_columns = _leading_whitespace_columns(line)
-        if leading_columns >= 4:
-            is_in_indented_code_block = True
+        if _try_enter_indented_code(ctx, line):
             continue
-        if is_in_indented_code_block:
-            if line.strip() == "":
-                continue
-            is_in_indented_code_block = False
 
         # Ignores code blocks and existing TOC header line
-        if code_fence_char is not None or is_in_indented_code_block or line.startswith(TOC_HEADER):
+        if ctx.state is not ParserState.NORMAL or line.startswith(TOC_HEADER):
             continue
 
         # Enforce line length outside TOC sections

@@ -11,6 +11,7 @@ from toc_markdown.cli import (
     TOC_START_MARKER,
     parse_file,
 )
+from toc_markdown.parser import parse_markdown
 
 
 def _write_markdown(tmp_path: Path, content: str) -> Path:
@@ -57,7 +58,7 @@ def test_parse_file_handles_tilde_fences_with_info_strings(tmp_path: Path):
         ## Visible
            ~~~python
            ## Hidden
-             ~~~
+           ~~~
         ### After
         """,
     )
@@ -130,7 +131,7 @@ def test_parse_file_closes_fences_inside_lists(tmp_path: Path):
         - item
           ```
           ## Hidden
-            ```
+          ```
         ## After
         """,
     )
@@ -228,3 +229,84 @@ def test_mixed_real_and_fake_toc_markers(tmp_path: Path):
     # Only the real TOC should be detected
     assert toc_start == 0
     assert toc_end == 2
+
+
+def test_parse_markdown_cycles_fence_state_back_to_normal():
+    content = "\n".join(
+        [
+            "```",
+            "## Hidden",
+            "```",
+            "## Visible",
+            "",
+        ]
+    )
+
+    result = parse_markdown(content)
+
+    assert result.headers == ["## Visible"]
+
+
+def test_parse_markdown_transitions_from_indented_to_fenced_code():
+    content = "\n".join(
+        [
+            "    code fence marker",
+            "    still code",
+            "```",
+            "## Ignored in fenced code",
+            "```",
+            "## After blocks",
+            "",
+        ]
+    )
+
+    result = parse_markdown(content)
+
+    assert result.headers == ["## After blocks"]
+
+
+def test_parse_markdown_handles_unclosed_fence():
+    content = "\n".join(
+        [
+            "```",
+            "## Hidden",
+            "## Still hidden",
+            "",
+        ]
+    )
+
+    result = parse_markdown(content)
+
+    assert result.headers == []
+
+
+def test_tab_indented_fence_treated_as_indented_code():
+    content = "\n".join(
+        [
+            "\t```",
+            "\t## Hidden",
+            "\t```",
+            "## Visible",
+            "",
+        ]
+    )
+
+    result = parse_markdown(content)
+
+    assert result.headers == ["## Visible"]
+
+
+def test_parse_markdown_rejects_overindented_closing_fence():
+    content = "\n".join(
+        [
+            "   ```",
+            "   inside",
+            "      ```",
+            "## Ignored because fence stays open",
+            "",
+        ]
+    )
+
+    result = parse_markdown(content)
+
+    assert result.headers == []
