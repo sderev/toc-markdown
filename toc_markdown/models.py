@@ -1,6 +1,25 @@
 """Data models for toc-markdown."""
 
 from dataclasses import dataclass
+from enum import Enum, auto
+
+
+class ParserState(Enum):
+    """States for markdown parsing."""
+
+    NORMAL = auto()
+    IN_FENCED_CODE = auto()
+    IN_INDENTED_CODE = auto()
+
+
+@dataclass
+class ParserContext:
+    """Encapsulates parser state and related data."""
+
+    state: ParserState = ParserState.NORMAL
+    fence_char: str | None = None
+    fence_length: int = 0
+    fence_indent_columns: int = 0
 
 
 @dataclass
