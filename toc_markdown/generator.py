@@ -8,19 +8,27 @@ from .slugify import generate_slug
 
 
 def generate_toc_entries(headers: list[str], config: TocConfig | None = None) -> list[str]:
-    """
-    Generates a table of contents from a list of headers.
+    """Render table-of-contents lines from parsed headers.
 
-    Handles duplicate headers using GitHub's convention: first occurrence gets
-    the base slug, subsequent duplicates get numbered suffixes (-1, -2, etc.).
-    Uses a hybrid approach with O(n) complexity for optimal performance while
-    correctly handling cascading collisions.
+    Deduplicates slugs using GitHub-style numbering, including cascading
+    collisions (for example, ``"Header"``, ``"Header"``, ``"Header 1"`` yields
+    ``header``, ``header-1``, ``header-1-1``). Adds configured markers and
+    header text to the output.
 
     Args:
-        headers (list): A list of markdown headers.
+        headers: Markdown header lines, including leading ``#`` characters.
+        config: Configuration for indentation, list style, and limits. Defaults
+            to a new `TocConfig` when omitted.
 
     Returns:
-        list: A list of lines that make up the TOC.
+        list[str]: Lines that compose the TOC, each ending with a newline.
+
+    Raises:
+        ConfigError: If the configuration fails validation.
+
+    Examples:
+        generate_toc_entries(["# Title", "## Details"], TocConfig(min_level=1))
+        generate_toc_entries(["# Header", "# Header", "# Header 1"])
     """
     config = config or TocConfig()
     validate_config(config)
@@ -81,7 +89,24 @@ def generate_toc_entries(headers: list[str], config: TocConfig | None = None) ->
 def validate_toc_markers(
     toc_start_line: int, toc_end_line: int, config: TocConfig | None = None
 ) -> None:
-    """Ensure TOC markers are sane before mutating the file."""
+    """Validate TOC marker positions before mutating the file.
+
+    Args:
+        toc_start_line: Zero-based index of the TOC start marker.
+        toc_end_line: Zero-based index of the TOC end marker.
+        config: Configuration used to derive the maximum allowable TOC span.
+
+    Returns:
+        None.
+
+    Raises:
+        ValueError: If the start marker is after the end marker or the computed
+            TOC span is suspiciously large.
+        ConfigError: If the configuration fails validation.
+
+    Examples:
+        validate_toc_markers(10, 25, TocConfig(max_headers=100))
+    """
 
     config = config or TocConfig()
     validate_config(config)

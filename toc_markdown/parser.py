@@ -11,17 +11,21 @@ from .models import ParseResult, ParserContext, ParserState
 
 
 def is_escaped(text: str, pos: int) -> bool:
-    """
-    Check if a character at position pos is escaped by counting preceding backslashes.
+    """Determine whether a character is escaped by preceding backslashes.
 
-    A character is escaped if it's preceded by an odd number of backslashes.
+    Counts consecutive backslashes immediately before `pos`; an odd count marks
+    the character as escaped.
 
     Args:
-        text (str): The text to check.
-        pos (int): The position of the character to check.
+        text: Text containing the character.
+        pos: Zero-based index of the character to inspect.
 
     Returns:
-        bool: True if the character is escaped, False otherwise.
+        bool: True when the character is escaped, otherwise False.
+
+    Examples:
+        is_escaped("\\\\*", 2)  # False, two backslashes
+        is_escaped("\\*", 1)  # True, one backslash
     """
     if pos == 0:
         return False
@@ -38,17 +42,21 @@ def is_escaped(text: str, pos: int) -> bool:
 
 
 def find_inline_code_spans(text: str) -> list[tuple[int, int]]:
-    """
-    Find all inline code spans in text and return their (start, end) positions.
+    """Locate inline code spans using CommonMark-style backticks.
 
-    Follows CommonMark spec: inline code spans are delimited by backtick strings
-    of equal length. For example, `code`, ``code``, ```code```, etc.
+    Inline spans must start and end with backtick sequences of equal length;
+    both delimiters must be unescaped.
 
     Args:
-        text (str): The text to scan for inline code spans.
+        text: The text to scan for inline code spans.
 
     Returns:
-        list[tuple[int, int]]: List of (start, end) positions for each code span.
+        list[tuple[int, int]]: Start (inclusive) and end (exclusive) positions
+            for each inline code span.
+
+    Examples:
+        find_inline_code_spans("`code`")  # [(0, 6)]
+        find_inline_code_spans("``more`` text")  # [(0, 8)]
     """
     spans = []
     i = 0
@@ -85,22 +93,21 @@ def find_inline_code_spans(text: str) -> list[tuple[int, int]]:
 
 
 def strip_markdown_links(text: str) -> str:
-    r"""
-    Strips markdown link syntax from text, extracting only the link text.
+    r"""Remove Markdown link and image syntax while preserving visible text.
 
-    Converts `[text](url)` to just `text`, while preserving links inside inline code.
-    Handles:
-    * Multi-backtick inline code (e.g., `` `code` ``)
-    * URLs with nested parentheses (e.g., `https://example.com/foo(bar(baz))`)
-    * Angle-bracketed URLs (e.g., `[text](<url(with)parens>)`)
-    * Reference-style links (e.g., `[text][ref]` or `![image][ref]`)
-    * Escaped image markers (e.g., `\![text](url)` preserved as-is)
+    Link markers inside inline code are left intact, and escaped image markers
+    (``\!``) remain literal. Nested parentheses, angle-bracket URLs, and
+    reference-style links are handled.
 
     Args:
-        text (str): The text potentially containing markdown links.
+        text: Text potentially containing Markdown links.
 
     Returns:
-        str: The text with markdown link syntax removed.
+        str: Text with link and image syntax removed while keeping the link text.
+
+    Examples:
+        strip_markdown_links("[title](https://example.com)")  # "title"
+        strip_markdown_links("`[code](x)` and [title](y)")  # "`[code](x)` and title"
     """
     # Find all inline code spans using state machine
     code_spans = find_inline_code_spans(text)
@@ -262,9 +269,20 @@ def strip_markdown_links(text: str) -> str:
 
 
 def _leading_whitespace_columns(line: str) -> int:
-    """
-    Returns the number of visual columns occupied by the line's leading whitespace.
-    Tabs advance to the next multiple of four columns to match Markdown indentation rules.
+    """Compute the column width of leading whitespace.
+
+    Tabs advance to the next multiple of four columns to match Markdown
+    indentation rules.
+
+    Args:
+        line: Line whose leading whitespace should be measured.
+
+    Returns:
+        int: Number of columns occupied by the leading whitespace.
+
+    Examples:
+        _leading_whitespace_columns("    text")  # 4
+        _leading_whitespace_columns("\ttext")  # 4
     """
     columns = 0
     for character in line:
@@ -279,8 +297,17 @@ def _leading_whitespace_columns(line: str) -> int:
 
 
 def _try_open_fence(ctx: ParserContext, line: str) -> bool:
-    """
-    Try to open a fenced code block. Returns True if the line starts a fence.
+    """Detect the start of a fenced code block.
+
+    Args:
+        ctx: Parser context to update when a fence opens.
+        line: Current line being scanned.
+
+    Returns:
+        bool: True when the line begins a fence and the context is updated.
+
+    Examples:
+        _try_open_fence(ParserContext(), "```python\n")  # True
     """
     if ctx.state is not ParserState.NORMAL:
         return False
@@ -303,8 +330,18 @@ def _try_open_fence(ctx: ParserContext, line: str) -> bool:
 
 
 def _try_close_fence(ctx: ParserContext, line: str) -> bool:
-    """
-    Try to close a fenced code block. Returns True if the line closes the current fence.
+    """Attempt to close the active fenced code block.
+
+    Args:
+        ctx: Parser context describing the active fence.
+        line: Current line being scanned.
+
+    Returns:
+        bool: True when the line closes the fence; otherwise False.
+
+    Examples:
+        ctx = ParserContext(state=ParserState.IN_FENCED_CODE, fence_char="`", fence_length=3)
+        _try_close_fence(ctx, "```\n")
     """
     if ctx.state is not ParserState.IN_FENCED_CODE or ctx.fence_char is None:
         return False
@@ -332,8 +369,17 @@ def _try_close_fence(ctx: ParserContext, line: str) -> bool:
 
 
 def _try_enter_indented_code(ctx: ParserContext, line: str) -> bool:
-    """
-    Try to enter an indented code block. Returns True if the line is indented code.
+    """Detect entry into an indented code block.
+
+    Args:
+        ctx: Parser context to update.
+        line: Line being scanned.
+
+    Returns:
+        bool: True when the line starts indented code; otherwise False.
+
+    Examples:
+        _try_enter_indented_code(ParserContext(), "    indented")
     """
     if ctx.state is not ParserState.NORMAL:
         return False
@@ -346,8 +392,20 @@ def _try_enter_indented_code(ctx: ParserContext, line: str) -> bool:
 
 
 def _try_exit_indented_code(ctx: ParserContext, line: str) -> bool:
-    """
-    Try to exit an indented code block. Returns True when the line should be skipped.
+    """Determine whether to leave an indented code block.
+
+    Args:
+        ctx: Parser context to update.
+        line: Line being scanned.
+
+    Returns:
+        bool: True when the parser should remain in code mode for the line
+            (blank or still indented); False when the parser should resume
+            normal processing.
+
+    Examples:
+        ctx = ParserContext(state=ParserState.IN_INDENTED_CODE)
+        _try_exit_indented_code(ctx, "next line")
     """
     if ctx.state is not ParserState.IN_INDENTED_CODE:
         return False
@@ -365,23 +423,29 @@ def _try_exit_indented_code(ctx: ParserContext, line: str) -> bool:
 def parse_markdown(
     content: str, max_line_length: int | None = None, config: TocConfig | None = None
 ) -> ParseResult:
-    """
-    Parses markdown content and extracts headers and TOC markers.
+    """Parse Markdown content to extract headers and TOC markers.
 
-    This is a pure function that takes string content and returns parsed results
-    without any I/O operations.
+    Ignores TOC markers and headers inside code blocks, and enforces header and
+    line-length limits based on the provided configuration.
 
     Args:
-        content (str): The markdown content to parse.
-        max_line_length (int | None): Override maximum allowed line length (excluding line endings).
-        config (TocConfig | None): Configuration to use. Defaults to TocConfig().
+        content: The markdown content to parse.
+        max_line_length: Optional override for the maximum allowed line length
+            (excluding line endings).
+        config: Configuration controlling parsing behavior. Defaults to a new
+            `TocConfig` when omitted.
 
     Returns:
-        ParseResult: Parsed markdown with headers and TOC marker positions.
+        ParseResult: File lines, parsed headers, and TOC marker positions. Marker
+            indices are None when no matching marker is found.
 
     Raises:
-        LineTooLongError: If a line exceeds max_line_length.
+        ConfigError: If the configuration fails validation.
+        LineTooLongError: If a non-TOC line exceeds `max_line_length`.
         TooManyHeadersError: If the document has more headers than allowed.
+
+    Examples:
+        parse_markdown("# Title\\n\\n## Section\\n", max_line_length=80)
     """
     config = config or TocConfig()
     validate_config(config)

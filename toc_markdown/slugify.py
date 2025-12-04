@@ -8,14 +8,23 @@ import unicodedata
 
 
 def generate_slug(title: str) -> str:
-    """
-    Generates a slug for a given title to be used as an anchor link in markdown.
+    """Generate a URL-style slug from a Markdown header title.
+
+    Converts the title to lowercase ASCII, removes punctuation except hyphens
+    and underscores, collapses whitespace to single hyphens, and returns
+    ``"untitled"`` when no characters remain after normalization.
 
     Args:
-        title (str): The title to generate a slug for.
+        title: The header text to convert into a slug.
 
     Returns:
-        str: The generated slug.
+        str: Hyphen-separated slug suitable for anchor links. Returns
+            ``"untitled"`` when the processed title is empty.
+
+    Examples:
+        generate_slug("Hello World")  # "hello-world"
+        generate_slug("What's New?")  # "whats-new"
+        generate_slug("   ")  # "untitled"
     """
     # Keep hyphens and underscores in the slug, but remove other punctuation
     punctuation = string.punctuation.replace("-", "").replace("_", "")

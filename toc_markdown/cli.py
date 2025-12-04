@@ -59,7 +59,23 @@ __all__ = [
 
 
 def apply_overrides(config: TocConfig, **overrides: object) -> TocConfig:
-    """Apply CLI overrides to configuration."""
+    """Apply override values to a `TocConfig`.
+
+    Args:
+        config: Base configuration to update.
+        overrides: Override values keyed by configuration field name; values set to
+            None are ignored.
+
+    Returns:
+        TocConfig: New configuration with the provided overrides applied. The
+            original configuration is returned when no changes are supplied.
+
+    Raises:
+        TypeError: If an override name is not defined on `TocConfig`.
+
+    Examples:
+        updated = apply_overrides(config, header_text="Contents", min_level=2)
+    """
     changes = {key: value for key, value in overrides.items() if value is not None}
     if not changes:
         return config
@@ -67,7 +83,22 @@ def apply_overrides(config: TocConfig, **overrides: object) -> TocConfig:
 
 
 def build_config(search_path: Path, **overrides: object) -> TocConfig:
-    """Load configuration from disk and apply CLI overrides."""
+    """Load, override, and validate configuration.
+
+    Args:
+        search_path: Directory where configuration files are resolved.
+        overrides: Override values keyed by configuration attributes; None values
+            are ignored.
+
+    Returns:
+        TocConfig: Validated configuration ready for parsing.
+
+    Raises:
+        ConfigError: If configuration loading or validation fails.
+
+    Examples:
+        config = build_config(Path.cwd(), min_level=2, list_style="-")
+    """
     config = load_config(search_path)
     config = apply_overrides(config, **overrides)
     validate_config(config)
@@ -95,11 +126,29 @@ def cli(
     list_style: str | None = None,
 ):
     """
-    Generates or updates the table of contents for the specified Markdown file.
+    Entry point for generating or updating a Markdown table of contents.
 
-    FILEPATH: The path to the Markdown file.
+    Args:
+        filepath: Path to the Markdown file to process.
+        start_marker: Override for the TOC start marker.
+        end_marker: Override for the TOC end marker.
+        header_text: Replacement text for the TOC header.
+        min_level: Smallest header level to include.
+        max_level: Largest header level to include.
+        indent_chars: Indentation characters for nested entries.
+        list_style: Bullet style to use (`1.`, `*`, or `-`).
 
-    Example: toc-markdown README.md
+    Returns:
+        None.
+
+    Raises:
+        click.BadParameter: If CLI parameters reference invalid paths or contain
+            unsupported overrides, including invalid configuration values.
+        click.ClickException: If parsing fails due to limits or malformed content.
+        IOError: If filesystem safety checks fail or the target cannot be accessed.
+
+    Examples:
+        toc-markdown README.md --min-level 2 --list-style "-"
     """
     base_dir = Path.cwd().resolve()
     filepath = normalize_filepath(filepath, base_dir)
@@ -144,10 +193,20 @@ def cli(
 
 
 def get_max_file_size(default: int = DEFAULT_MAX_FILE_SIZE) -> int:
-    """
-    Returns the maximum file size allowed for processing.
+    """Resolve the maximum allowed file size.
 
-    The limit can be configured via the TOC_MARKDOWN_MAX_FILE_SIZE environment variable.
+    Args:
+        default: Fallback value in bytes when the environment variable is unset.
+
+    Returns:
+        int: Maximum allowed file size in bytes.
+
+    Raises:
+        click.ClickException: If the environment value is not a positive integer.
+
+    Examples:
+        os.environ["TOC_MARKDOWN_MAX_FILE_SIZE"] = "204800"
+        limit = get_max_file_size(default=102400)
     """
     env_value = os.environ.get(MAX_FILE_SIZE_ENV_VAR)
     if env_value is None:
@@ -173,10 +232,21 @@ def get_max_file_size(default: int = DEFAULT_MAX_FILE_SIZE) -> int:
 
 
 def get_max_line_length(default: int = DEFAULT_MAX_LINE_LENGTH) -> int:
-    """
-    Returns the maximum line length allowed for processing.
+    """Resolve the maximum allowed line length.
 
-    The limit can be configured via the TOC_MARKDOWN_MAX_LINE_LENGTH environment variable.
+    Args:
+        default: Fallback value in characters when the environment variable is
+            unset.
+
+    Returns:
+        int: Maximum allowed line length in characters.
+
+    Raises:
+        click.ClickException: If the environment value is not a positive integer.
+
+    Examples:
+        os.environ["TOC_MARKDOWN_MAX_LINE_LENGTH"] = "160"
+        limit = get_max_line_length(default=120)
     """
     env_value = os.environ.get(MAX_LINE_LENGTH_ENV_VAR)
     if env_value is None:
@@ -202,9 +272,22 @@ def get_max_line_length(default: int = DEFAULT_MAX_LINE_LENGTH) -> int:
 
 
 def normalize_filepath(raw_path: str, base_dir: Path) -> Path:
-    """
-    Validates and resolves a user-supplied filepath, ensuring that it is a markdown file
-    located under the working directory and not backed by a symlink.
+    """Resolve and validate a Markdown filepath under a base directory.
+
+    Args:
+        raw_path: User-supplied path to a Markdown file (absolute or relative).
+        base_dir: Working directory that constrains allowed paths.
+
+    Returns:
+        Path: Absolute path to the Markdown file.
+
+    Raises:
+        click.BadParameter: If the path does not exist, is outside `base_dir`, uses
+            an unsupported extension, or traverses a symlink.
+
+    Examples:
+        normalize_filepath("docs/README.md", Path.cwd())
+        normalize_filepath("~/notes.md", Path.cwd())
     """
     path = Path(raw_path).expanduser()
 
@@ -245,8 +328,16 @@ def normalize_filepath(raw_path: str, base_dir: Path) -> Path:
 
 
 def contains_symlink(path: Path) -> bool:
-    """
-    Returns True if the provided path or any of its parents is a symlink.
+    """Check whether a path or any parent directory is a symlink.
+
+    Args:
+        path: Path to inspect.
+
+    Returns:
+        bool: True when a symlink is encountered, otherwise False.
+
+    Examples:
+        contains_symlink(Path("/tmp/link/child"))
     """
     for candidate in (path, *path.parents):
         try:
@@ -258,8 +349,19 @@ def contains_symlink(path: Path) -> bool:
 
 
 def collect_file_stat(filepath: Path) -> os.stat_result:
-    """
-    Returns the stat information of the specified file while ensuring it is a regular file.
+    """Return stat information for a file while disallowing symlinks.
+
+    Args:
+        filepath: Path to inspect.
+
+    Returns:
+        os.stat_result: File metadata gathered without following symlinks.
+
+    Raises:
+        IOError: If the path is inaccessible, a symlink, or not a regular file.
+
+    Examples:
+        stat_result = collect_file_stat(Path("README.md"))
     """
     try:
         stat_result = os.stat(filepath, follow_symlinks=False)
@@ -279,8 +381,21 @@ def collect_file_stat(filepath: Path) -> os.stat_result:
 
 
 def enforce_file_size(stat_result: os.stat_result, max_size: int, filepath: Path):
-    """
-    Ensures the file size does not exceed the configured maximum.
+    """Guard against files that exceed the configured maximum size.
+
+    Args:
+        stat_result: File stat used to determine size in bytes.
+        max_size: Maximum allowed size in bytes.
+        filepath: Path to the file being checked.
+
+    Returns:
+        None.
+
+    Raises:
+        IOError: If `stat_result.st_size` exceeds `max_size`.
+
+    Examples:
+        enforce_file_size(os.stat("README.md"), 102400, Path("README.md"))
     """
     if stat_result.st_size > max_size:
         error_message = (
@@ -293,8 +408,21 @@ def enforce_file_size(stat_result: os.stat_result, max_size: int, filepath: Path
 def ensure_file_unchanged(
     expected_stat: os.stat_result, current_stat: os.stat_result, filepath: Path
 ):
-    """
-    Ensures that the file has not changed between operations to avoid race conditions.
+    """Detect changes between two filesystem snapshots.
+
+    Args:
+        expected_stat: Stat captured before processing.
+        current_stat: Stat captured after processing.
+        filepath: Path to the file being monitored.
+
+    Returns:
+        None.
+
+    Raises:
+        IOError: If inode, device, size, or modification time differ.
+
+    Examples:
+        ensure_file_unchanged(expected_stat, current_stat, filepath)
     """
     fingerprint_before = (
         getattr(expected_stat, "st_ino", None),
@@ -315,14 +443,20 @@ def ensure_file_unchanged(
 
 
 def safe_read(filepath: Path) -> TextIO:
-    """
-    Opens a file and handles any errors.
+    """Open a file for reading with consistent error handling.
 
     Args:
-        filepath (Path): The path to the file.
+        filepath: Path to the file.
 
     Returns:
-        TextIO: A file object opened for reading.
+        TextIO: File handle opened for reading in UTF-8.
+
+    Raises:
+        IOError: If the path is missing, inaccessible, or not a file.
+
+    Examples:
+        with safe_read(Path("README.md")) as handle:
+            first_line = handle.readline()
     """
     try:
         return open(filepath, "r", encoding="UTF-8")
@@ -341,21 +475,27 @@ def parse_file(
     max_line_length: int | None = None,
     config: TocConfig | None = None,
 ) -> tuple[list[str], list[str], int | None, int | None]:
-    """
-    Parses the specified Markdown file.
-
-    This is a wrapper around parse_markdown() that handles I/O and Click error formatting.
+    """Parse a Markdown file and extract TOC metadata.
 
     Args:
-        filepath (Path): The path to the markdown file.
-        max_line_length (int): Maximum allowed line length (excluding line endings).
+        filepath: Path to the markdown file to parse.
+        max_line_length: Optional override for the maximum allowed line length
+            (excluding line endings).
+        config: Configuration controlling parsing behavior; defaults to a new
+            `TocConfig` when omitted.
 
     Returns:
-        tuple: A tuple containing:
-            - full_file: A list of lines in the file.
-            - headers: A list of headers found in the file.
-            - toc_start_line: The line number where the TOC starts, or None if not found.
-            - toc_end_line: The line number where the TOC ends, or None if not found.
+        tuple[list[str], list[str], int | None, int | None]: Full file content as
+            lines, parsed headers, TOC start line index, and TOC end line index.
+            The TOC indices are None when no existing TOC markers are present.
+
+    Raises:
+        click.ClickException: If configuration is invalid or parsing fails because
+            of length limits, header limits, or malformed content.
+        IOError: If the file cannot be read or decoded.
+
+    Examples:
+        full_file, headers, toc_start, toc_end = parse_file(Path("README.md"), 120, config)
     """
     config = config or TocConfig()
     try:
@@ -408,17 +548,26 @@ def update_toc(
     expected_stat: os.stat_result,
     initial_stat: os.stat_result,
 ):
-    """
-    Updates the table of contents in the specified Markdown file.
+    """Rewrite a Markdown file with an updated table of contents.
 
     Args:
-        full_file (list): A list of lines in the file.
-        filepath (Path): The path to the markdown file.
-        toc (list): A list of lines that make up the TOC.
-        toc_start_line (int): The line number where the TOC starts.
-        toc_end_line (int): The line number where the TOC ends.
-        expected_stat (os.stat_result): The file stat after parsing (for race detection).
-        initial_stat (os.stat_result): The file stat before parsing (for atime preservation).
+        full_file: Original file content split into lines.
+        filepath: Path to the Markdown file to update.
+        toc: Rendered TOC lines to insert.
+        toc_start_line: Index where the existing TOC starts (0-based).
+        toc_end_line: Index where the existing TOC ends (0-based).
+        expected_stat: File stat captured after parsing, used to detect races.
+        initial_stat: File stat captured before parsing, used to preserve access time.
+
+    Returns:
+        None.
+
+    Raises:
+        IOError: If the file changes between parsing and writing or cannot be
+            updated atomically.
+
+    Examples:
+        update_toc(full_file, Path("README.md"), toc_lines, toc_start, toc_end, post_stat, pre_stat)
     """
     current_stat = collect_file_stat(filepath)
     ensure_file_unchanged(expected_stat, current_stat, filepath)
