@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 import tomllib
 
@@ -177,6 +177,53 @@ def validate_config(config: TocConfig) -> None:
         )
     except TypeError as error:
         raise ConfigError("numeric limits must be positive integers") from error
+
+
+def apply_overrides(config: TocConfig, **overrides: object) -> TocConfig:
+    """Apply override values to a `TocConfig`.
+
+    Args:
+        config: Base configuration to update.
+        overrides: Override values keyed by configuration field name; values set to
+            None are ignored.
+
+    Returns:
+        TocConfig: New configuration with the provided overrides applied. The
+        original configuration is returned when no changes are supplied.
+
+    Raises:
+        TypeError: If an override name is not defined on `TocConfig`.
+
+    Examples:
+        updated = apply_overrides(config, header_text="Contents", min_level=2)
+    """
+    changes = {key: value for key, value in overrides.items() if value is not None}
+    if not changes:
+        return config
+    return replace(config, **changes)
+
+
+def build_config(search_path: Path, **overrides: object) -> TocConfig:
+    """Load, override, and validate configuration.
+
+    Args:
+        search_path: Directory where configuration files are resolved.
+        overrides: Override values keyed by configuration attributes; None values
+            are ignored.
+
+    Returns:
+        TocConfig: Validated configuration ready for parsing.
+
+    Raises:
+        ConfigError: If configuration loading or validation fails.
+
+    Examples:
+        config = build_config(Path.cwd(), min_level=2, list_style="-")
+    """
+    config = load_config(search_path)
+    config = apply_overrides(config, **overrides)
+    validate_config(config)
+    return config
 
 
 def _ensure_positive(values: dict[str, int]) -> None:

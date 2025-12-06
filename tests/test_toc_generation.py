@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from toc_markdown.cli import TOC_END_MARKER, TOC_START_MARKER, generate_toc
 from toc_markdown.config import TocConfig
+from toc_markdown.constants import TOC_END_MARKER, TOC_START_MARKER
+from toc_markdown.generator import generate_toc_entries as generate_toc
 
 
 def test_generate_toc_for_simple_headers():

@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
-from .config import TocConfig, validate_config
+import click
+
+from .config import ConfigError, TocConfig, validate_config
 from .constants import CLOSING_FENCE_MAX_INDENT, CODE_FENCE_PATTERN
-from .exceptions import LineTooLongError, TooManyHeadersError
+from .exceptions import LineTooLongError, ParseError, TooManyHeadersError
+from .filesystem import safe_read
 from .models import ParseResult, ParserContext, ParserState
 
 
@@ -548,3 +552,72 @@ def parse_markdown(
         toc_start_line=toc_start_line,
         toc_end_line=toc_end_line,
     )
+
+
+def parse_file(
+    filepath: Path,
+    max_line_length: int | None = None,
+    config: TocConfig | None = None,
+) -> tuple[list[str], list[str], int | None, int | None]:
+    """Parse a Markdown file and extract TOC metadata.
+
+    Args:
+        filepath: Path to the markdown file to parse.
+        max_line_length: Optional override for the maximum allowed line length
+            (excluding line endings).
+        config: Configuration controlling parsing behavior; defaults to a new
+            `TocConfig` when omitted.
+
+    Returns:
+        tuple[list[str], list[str], int | None, int | None]: Full file content as
+            lines, parsed headers, TOC start line index, and TOC end line index.
+            The TOC indices are None when no existing TOC markers are present.
+
+    Raises:
+        click.ClickException: If configuration is invalid or parsing fails because
+            of length limits, header limits, or malformed content.
+        IOError: If the file cannot be read or decoded.
+
+    Examples:
+        full_file, headers, toc_start, toc_end = parse_file(Path("README.md"), 120, config)
+    """
+    config = config or TocConfig()
+    try:
+        validate_config(config)
+    except ConfigError as error:
+        raise click.ClickException(str(error)) from error
+
+    effective_max_line_length = (
+        config.max_line_length if max_line_length is None else max_line_length
+    )
+
+    # Read file content
+    try:
+        with safe_read(filepath) as file:
+            content = file.read()
+    except UnicodeDecodeError as error:
+        error_message = f"Invalid UTF-8 sequence in {filepath}: {click.style(str(error), fg='red')}"
+        raise IOError(error_message) from error
+
+    # Parse content using pure function
+    try:
+        result = parse_markdown(content, effective_max_line_length, config)
+    except LineTooLongError as error:
+        error_message = (
+            f"{click.style(str(filepath), fg='red')} contains a line at line {error.line_number} "
+            f"exceeding the maximum allowed length of {click.style(str(error.max_line_length), fg='red')} "
+            "characters."
+        )
+        raise click.ClickException(error_message) from error
+    except TooManyHeadersError as error:
+        error_message = (
+            f"{click.style(str(filepath), fg='red')} contains too many headers "
+            f"(limit: {click.style(str(error.limit), fg='red')})."
+        )
+        raise click.ClickException(error_message) from error
+    except ParseError as error:
+        error_message = f"{click.style(str(filepath), fg='red')}: {error}"
+        raise click.ClickException(error_message) from error
+
+    # Return as tuple for backward compatibility with existing code
+    return result.full_file, result.headers, result.toc_start_line, result.toc_end_line

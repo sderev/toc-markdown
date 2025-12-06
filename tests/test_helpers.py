@@ -7,15 +7,15 @@ from pathlib import Path
 
 import click
 import pytest
-from toc_markdown.cli import (
+from toc_markdown.filesystem import (
     collect_file_stat,
     contains_symlink,
     get_max_file_size,
     get_max_line_length,
     normalize_filepath,
     safe_read,
-    strip_markdown_links,
 )
+from toc_markdown.parser import strip_markdown_links
 
 
 def test_get_max_file_size_rejects_non_integer(monkeypatch):

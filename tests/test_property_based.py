@@ -4,8 +4,8 @@ import string
 
 from hypothesis import assume, given
 from hypothesis import strategies as st
-from toc_markdown.cli import generate_slug, generate_toc
 from toc_markdown.constants import CLOSING_FENCE_MAX_INDENT
+from toc_markdown.generator import generate_toc_entries as generate_toc
 from toc_markdown.models import ParserContext, ParserState
 from toc_markdown.parser import (
     _try_close_fence,
@@ -13,6 +13,7 @@ from toc_markdown.parser import (
     _try_open_fence,
     parse_markdown,
 )
+from toc_markdown.slugify import generate_slug
 
 
 @given(st.text())

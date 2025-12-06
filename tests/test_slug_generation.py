@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from toc_markdown.cli import generate_slug
+from toc_markdown.slugify import generate_slug
 
 
 @pytest.mark.parametrize(
