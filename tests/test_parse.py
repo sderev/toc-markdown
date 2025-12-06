@@ -6,13 +6,19 @@ from pathlib import Path
 import pytest
 from toc_markdown.constants import CODE_FENCE, DEFAULT_MAX_LINE_LENGTH, TOC_END_MARKER, TOC_START_MARKER
 from toc_markdown.config import TocConfig
-from toc_markdown.parser import parse_file, parse_markdown
+from toc_markdown.parser import ParseFileError, parse_file, parse_markdown
 
 
 def _write_markdown(tmp_path: Path, content: str) -> Path:
     target = tmp_path / "sample.md"
     target.write_text(textwrap.dedent(content).lstrip(), encoding="utf-8")
     return target
+
+
+def test_parse_file_rejects_non_positive_override(tmp_path: Path):
+    target = _write_markdown(tmp_path, "## Heading\n")
+    with pytest.raises(ParseFileError):
+        parse_file(target, 0)
 
 
 def test_parse_file_detects_only_h2_and_h3(tmp_path: Path):

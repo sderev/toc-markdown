@@ -5,10 +5,9 @@ from __future__ import annotations
 import os
 import stat
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
 from typing import TextIO
-
-import click
 
 from .constants import DEFAULT_MAX_FILE_SIZE, DEFAULT_MAX_LINE_LENGTH, MARKDOWN_EXTENSIONS
 
@@ -26,7 +25,7 @@ def get_max_file_size(default: int = DEFAULT_MAX_FILE_SIZE) -> int:
         int: Maximum allowed file size in bytes.
 
     Raises:
-        click.ClickException: If the environment value is not a positive integer.
+        ValueError: If the environment value is not a positive integer.
 
     Examples:
         os.environ["TOC_MARKDOWN_MAX_FILE_SIZE"] = "204800"
@@ -40,17 +39,15 @@ def get_max_file_size(default: int = DEFAULT_MAX_FILE_SIZE) -> int:
         max_size = int(env_value)
     except ValueError as error:
         error_message = (
-            f"Invalid value for {MAX_FILE_SIZE_ENV_VAR}: "
-            f"{click.style(env_value, fg='red')} (expected positive integer)"
+            f"Invalid value for {MAX_FILE_SIZE_ENV_VAR}: {env_value} (expected positive integer)"
         )
-        raise click.ClickException(error_message) from error
+        raise ValueError(error_message) from error
 
     if max_size <= 0:
         error_message = (
-            f"{MAX_FILE_SIZE_ENV_VAR} must be a positive integer, got "
-            f"{click.style(str(max_size), fg='red')}."
+            f"{MAX_FILE_SIZE_ENV_VAR} must be a positive integer, got {max_size}."
         )
-        raise click.ClickException(error_message)
+        raise ValueError(error_message)
 
     return max_size
 
@@ -66,7 +63,7 @@ def get_max_line_length(default: int = DEFAULT_MAX_LINE_LENGTH) -> int:
         int: Maximum allowed line length in characters.
 
     Raises:
-        click.ClickException: If the environment value is not a positive integer.
+        ValueError: If the environment value is not a positive integer.
 
     Examples:
         os.environ["TOC_MARKDOWN_MAX_LINE_LENGTH"] = "160"
@@ -80,17 +77,15 @@ def get_max_line_length(default: int = DEFAULT_MAX_LINE_LENGTH) -> int:
         max_length = int(env_value)
     except ValueError as error:
         error_message = (
-            f"Invalid value for {MAX_LINE_LENGTH_ENV_VAR}: "
-            f"{click.style(env_value, fg='red')} (expected positive integer)"
+            f"Invalid value for {MAX_LINE_LENGTH_ENV_VAR}: {env_value} (expected positive integer)"
         )
-        raise click.ClickException(error_message) from error
+        raise ValueError(error_message) from error
 
     if max_length <= 0:
         error_message = (
-            f"{MAX_LINE_LENGTH_ENV_VAR} must be a positive integer, got "
-            f"{click.style(str(max_length), fg='red')}."
+            f"{MAX_LINE_LENGTH_ENV_VAR} must be a positive integer, got {max_length}."
         )
-        raise click.ClickException(error_message)
+        raise ValueError(error_message)
 
     return max_length
 
@@ -127,8 +122,8 @@ def normalize_filepath(raw_path: str, base_dir: Path) -> Path:
         Path: Absolute path to the Markdown file.
 
     Raises:
-        click.BadParameter: If the path does not exist, is outside `base_dir`, uses
-            an unsupported extension, or traverses a symlink.
+        ValueError: If the path does not exist, is outside `base_dir`, uses an
+            unsupported extension, or traverses a symlink.
 
     Examples:
         normalize_filepath("docs/README.md", Path.cwd())
@@ -137,37 +132,34 @@ def normalize_filepath(raw_path: str, base_dir: Path) -> Path:
     path = Path(raw_path).expanduser()
 
     if contains_symlink(path):
-        error_message = (
-            f"Symlinks are not supported for security reasons: {click.style(str(path), fg='red')}"
-        )
-        raise click.BadParameter(error_message)
+        error_message = f"Symlinks are not supported for security reasons: {path}"
+        raise ValueError(error_message)
 
     try:
         resolved = path.resolve(strict=True)
     except FileNotFoundError as error:
-        error_message = f"{click.style(str(path), fg='red')} does not exist."
-        raise click.BadParameter(error_message) from error
+        error_message = f"{path} does not exist."
+        raise ValueError(error_message) from error
     except OSError as error:
-        error_message = f"Error resolving {click.style(str(path), fg='red')}: {click.style(str(error), fg='red')}"
-        raise click.BadParameter(error_message) from error
+        error_message = f"Error resolving {path}: {error}"
+        raise ValueError(error_message) from error
 
     if not resolved.is_file():
-        error_message = f"{click.style(str(resolved), fg='red')} is not a regular file."
-        raise click.BadParameter(error_message)
+        error_message = f"{resolved} is not a regular file."
+        raise ValueError(error_message)
 
     try:
         resolved.relative_to(base_dir)
     except ValueError as error:
         error_message = (
-            f"{click.style(str(resolved), fg='red')} is outside of the working directory "
-            f"{click.style(str(base_dir), fg='red')}."
+            f"{resolved} is outside of the working directory {base_dir}."
         )
-        raise click.BadParameter(error_message) from error
+        raise ValueError(error_message) from error
 
     if resolved.suffix.lower() not in MARKDOWN_EXTENSIONS:
-        error_message = f"{click.style(f'{resolved} is not a Markdown file.', fg='red')}\n"
+        error_message = f"{resolved} is not a Markdown file.\n"
         error_message += f"Supported extensions are: {', '.join(MARKDOWN_EXTENSIONS)}"
-        raise click.BadParameter(error_message)
+        raise ValueError(error_message)
 
     return resolved
 
@@ -190,15 +182,15 @@ def collect_file_stat(filepath: Path) -> os.stat_result:
     try:
         stat_result = os.stat(filepath, follow_symlinks=False)
     except OSError as error:
-        error_message = f"Error accessing {filepath}: {click.style(str(error), fg='red')}"
+        error_message = f"Error accessing {filepath}: {error}"
         raise IOError(error_message) from error
 
     if stat.S_ISLNK(stat_result.st_mode):
-        error_message = f"Symlinks are not supported: {click.style(str(filepath), fg='red')}."
+        error_message = f"Symlinks are not supported: {filepath}."
         raise IOError(error_message)
 
     if not stat.S_ISREG(stat_result.st_mode):
-        error_message = f"{click.style(str(filepath), fg='red')} is not a regular file."
+        error_message = f"{filepath} is not a regular file."
         raise IOError(error_message)
 
     return stat_result
@@ -222,10 +214,7 @@ def enforce_file_size(stat_result: os.stat_result, max_size: int, filepath: Path
         enforce_file_size(os.stat("README.md"), 102400, Path("README.md"))
     """
     if stat_result.st_size > max_size:
-        error_message = (
-            f"{click.style(str(filepath), fg='red')} exceeds the maximum allowed size of "
-            f"{click.style(str(max_size), fg='red')} bytes."
-        )
+        error_message = f"{filepath} exceeds the maximum allowed size of {max_size} bytes."
         raise IOError(error_message)
 
 
@@ -262,7 +251,7 @@ def ensure_file_unchanged(
     )
 
     if fingerprint_before != fingerprint_after:
-        error_message = f"{click.style(str(filepath), fg='red')} changed during processing; refusing to overwrite."
+        error_message = f"{filepath} changed during processing; refusing to overwrite."
         raise IOError(error_message)
 
 
@@ -290,7 +279,7 @@ def safe_read(filepath: Path) -> TextIO:
         IsADirectoryError,
         NotADirectoryError,
     ) as error:
-        error_message = f"Error accessing {filepath}: {click.style(str(error), fg='red')}"
+        error_message = f"Error accessing {filepath}: {error}"
         raise IOError(error_message) from error
 
 
@@ -302,6 +291,7 @@ def update_toc(
     toc_end_line: int,
     expected_stat: os.stat_result,
     initial_stat: os.stat_result,
+    warn: Callable[[str], None] | None = None,
 ):
     """Rewrite a Markdown file with an updated table of contents.
 
@@ -313,6 +303,7 @@ def update_toc(
         toc_end_line: Index where the existing TOC ends (0-based).
         expected_stat: File stat captured after parsing, used to detect races.
         initial_stat: File stat captured before parsing, used to preserve access time.
+        warn: Optional callback for emitting non-fatal warnings (e.g., ownership preservation).
 
     Returns:
         None.
@@ -334,40 +325,49 @@ def update_toc(
     # Use atime from BEFORE the file was read to preserve original access time
     atime_ns = initial_stat.st_atime_ns
 
-    with tempfile.NamedTemporaryFile(
-        mode="w", encoding="UTF-8", delete=False, dir=filepath.parent
-    ) as tmp_file:
-        # Write the file up to the TOC start line
-        for line in full_file[:toc_start_line]:
-            tmp_file.write(line)
+    temp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="UTF-8", delete=False, dir=filepath.parent
+        ) as tmp_file:
+            temp_path = Path(tmp_file.name)
+            # Write the file up to the TOC start line
+            for line in full_file[:toc_start_line]:
+                tmp_file.write(line)
 
-        # Write the new TOC
-        for line in toc:
-            tmp_file.write(line)
+            # Write the new TOC
+            for line in toc:
+                tmp_file.write(line)
 
-        # Write the rest of the file after the TOC end line
-        tmp_file.writelines(full_file[toc_end_line + 1 :])
+            # Write the rest of the file after the TOC end line
+            tmp_file.writelines(full_file[toc_end_line + 1 :])
 
-        # Ensure the temporary file is flushed, synced, and has the original permissions
-        tmp_file.flush()
-        os.fsync(tmp_file.fileno())
-        os.chmod(tmp_file.name, permissions)
+            # Ensure the temporary file is flushed, synced, and has the original permissions
+            tmp_file.flush()
+            os.fsync(tmp_file.fileno())
+            os.chmod(tmp_file.name, permissions)
 
-        # Attempt to preserve ownership (requires privileges and platform support)
-        if uid is not None and gid is not None and hasattr(os, "chown"):
+            # Attempt to preserve ownership (requires privileges and platform support)
+            if uid is not None and gid is not None and hasattr(os, "chown"):
+                try:
+                    os.chown(tmp_file.name, uid, gid)
+                except PermissionError:
+                    if warn is not None:
+                        warn(
+                            f"Warning: Could not preserve file ownership for {filepath.name} "
+                            "(requires elevated privileges)"
+                        )
+
+        # Replace the original file with the temporary file (atomic operation)
+        os.replace(temp_path, filepath)
+
+        # Preserve access time (mtime intentionally NOT preserved to reflect actual modification)
+        # We read the new mtime from the replaced file and restore only the original atime
+        current_stat = filepath.stat()
+        os.utime(filepath, ns=(atime_ns, current_stat.st_mtime_ns))
+    finally:
+        if temp_path is not None:
             try:
-                os.chown(tmp_file.name, uid, gid)
-            except PermissionError:
-                click.echo(
-                    f"Warning: Could not preserve file ownership for {filepath.name} "
-                    "(requires elevated privileges)",
-                    err=True,
-                )
-
-    # Replace the original file with the temporary file (atomic operation)
-    os.replace(tmp_file.name, filepath)
-
-    # Preserve access time (mtime intentionally NOT preserved to reflect actual modification)
-    # We read the new mtime from the replaced file and restore only the original atime
-    current_stat = filepath.stat()
-    os.utime(filepath, ns=(atime_ns, current_stat.st_mtime_ns))
+                Path(temp_path).unlink(missing_ok=True)
+            except OSError:
+                pass

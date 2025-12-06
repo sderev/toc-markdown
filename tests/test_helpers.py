@@ -5,7 +5,6 @@ import socket
 import stat
 from pathlib import Path
 
-import click
 import pytest
 from toc_markdown.filesystem import (
     collect_file_stat,
@@ -20,30 +19,30 @@ from toc_markdown.parser import strip_markdown_links
 
 def test_get_max_file_size_rejects_non_integer(monkeypatch):
     monkeypatch.setenv("TOC_MARKDOWN_MAX_FILE_SIZE", "invalid")
-    with pytest.raises(click.ClickException):
+    with pytest.raises(ValueError):
         get_max_file_size()
 
 
 def test_get_max_file_size_rejects_non_positive(monkeypatch):
     monkeypatch.setenv("TOC_MARKDOWN_MAX_FILE_SIZE", "0")
-    with pytest.raises(click.ClickException):
+    with pytest.raises(ValueError):
         get_max_file_size()
 
 
 def test_get_max_line_length_rejects_non_integer(monkeypatch):
     monkeypatch.setenv("TOC_MARKDOWN_MAX_LINE_LENGTH", "invalid")
-    with pytest.raises(click.ClickException):
+    with pytest.raises(ValueError):
         get_max_line_length()
 
 
 def test_get_max_line_length_rejects_non_positive(monkeypatch):
     monkeypatch.setenv("TOC_MARKDOWN_MAX_LINE_LENGTH", "0")
-    with pytest.raises(click.ClickException):
+    with pytest.raises(ValueError):
         get_max_line_length()
 
 
 def test_normalize_filepath_missing_file(tmp_path: Path):
-    with pytest.raises(click.BadParameter):
+    with pytest.raises(ValueError):
         normalize_filepath(str(tmp_path / "missing.md"), tmp_path)
 
 
@@ -59,14 +58,14 @@ def test_normalize_filepath_handles_oserror(monkeypatch, tmp_path: Path):
         return original_resolve(self, strict=strict)
 
     monkeypatch.setattr(Path, "resolve", _raise_oserror)
-    with pytest.raises(click.BadParameter):
+    with pytest.raises(ValueError):
         normalize_filepath(str(target), base_dir)
 
 
 def test_normalize_filepath_rejects_directory(tmp_path: Path):
     folder = tmp_path / "folder"
     folder.mkdir()
-    with pytest.raises(click.BadParameter):
+    with pytest.raises(ValueError):
         normalize_filepath(str(folder), tmp_path)
 
 

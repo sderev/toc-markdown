@@ -19,7 +19,7 @@ from .filesystem import (
     update_toc,
 )
 from .generator import generate_toc_entries as generate_toc, validate_toc_markers
-from .parser import parse_file
+from .parser import ParseFileError, parse_file
 
 __all__ = ["cli"]
 
@@ -63,14 +63,17 @@ def cli(
     Raises:
         click.BadParameter: If CLI parameters reference invalid paths or contain
             unsupported overrides, including invalid configuration values.
-        click.ClickException: If parsing fails due to limits or malformed content.
-        IOError: If filesystem safety checks fail or the target cannot be accessed.
+        click.ClickException: If parsing fails due to limits or malformed content,
+            or if filesystem safety checks fail.
 
     Examples:
         toc-markdown README.md --min-level 2 --list-style "-"
     """
     base_dir = Path.cwd().resolve()
-    filepath = normalize_filepath(filepath, base_dir)
+    try:
+        filepath = normalize_filepath(filepath, base_dir)
+    except ValueError as error:
+        raise click.BadParameter(str(error)) from error
     try:
         config = build_config(
             filepath.parent,
@@ -85,16 +88,31 @@ def cli(
     except ConfigError as error:
         raise click.BadParameter(str(error)) from error
 
-    max_file_size = get_max_file_size(default=config.max_file_size)
-    max_line_length = get_max_line_length(default=config.max_line_length)
-    initial_stat = collect_file_stat(filepath)
-    enforce_file_size(initial_stat, max_file_size, filepath)
+    try:
+        max_file_size = get_max_file_size(default=config.max_file_size)
+        max_line_length = get_max_line_length(default=config.max_line_length)
+    except ValueError as error:
+        raise click.ClickException(str(error)) from error
 
-    full_file, headers, toc_start_line, toc_end_line = parse_file(
-        filepath, max_line_length, config
-    )
-    post_parse_stat = collect_file_stat(filepath)
-    ensure_file_unchanged(initial_stat, post_parse_stat, filepath)
+    try:
+        initial_stat = collect_file_stat(filepath)
+        enforce_file_size(initial_stat, max_file_size, filepath)
+    except IOError as error:
+        raise click.ClickException(str(error)) from error
+
+    try:
+        full_file, headers, toc_start_line, toc_end_line = parse_file(
+            filepath, max_line_length, config
+        )
+    except (ParseFileError, ConfigError) as error:
+        raise click.ClickException(str(error)) from error
+
+    try:
+        post_parse_stat = collect_file_stat(filepath)
+        ensure_file_unchanged(initial_stat, post_parse_stat, filepath)
+    except IOError as error:
+        raise click.ClickException(str(error)) from error
+
     toc = generate_toc(headers, config)
 
     # Updates TOC
@@ -103,9 +121,19 @@ def cli(
             validate_toc_markers(toc_start_line, toc_end_line, config)
         except ValueError as error:
             raise click.BadParameter(str(error)) from error
-        update_toc(
-            full_file, filepath, toc, toc_start_line, toc_end_line, post_parse_stat, initial_stat
-        )
+        try:
+            update_toc(
+                full_file,
+                filepath,
+                toc,
+                toc_start_line,
+                toc_end_line,
+                post_parse_stat,
+                initial_stat,
+                warn=lambda message: click.echo(message, err=True),
+            )
+        except IOError as error:
+            raise click.ClickException(str(error)) from error
     # Inserts TOC
     else:
         print("".join(toc), end="")
