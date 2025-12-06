@@ -4,12 +4,8 @@ import textwrap
 from pathlib import Path
 
 import toc_markdown.cli as cli_module
-from toc_markdown.cli import (
-    MAX_TOC_SECTION_LINES,
-    TOC_END_MARKER,
-    TOC_START_MARKER,
-    cli,
-)
+from toc_markdown.cli import cli
+from toc_markdown.constants import MAX_TOC_SECTION_LINES, TOC_END_MARKER, TOC_START_MARKER
 
 
 def _write(tmp_path: Path, filename: str, content: str) -> Path:
