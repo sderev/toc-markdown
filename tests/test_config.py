@@ -13,6 +13,12 @@ def _write_pyproject(base: Path, body: str) -> Path:
     return path
 
 
+def _write_toc_markdown(base: Path, body: str) -> Path:
+    path = base / ".toc-markdown.toml"
+    path.write_text(textwrap.dedent(body).lstrip(), encoding="utf-8")
+    return path
+
+
 def test_loads_config_from_pyproject(tmp_path: Path):
     _write_pyproject(
         tmp_path,
@@ -45,6 +51,24 @@ def test_loads_config_from_pyproject(tmp_path: Path):
         max_line_length=2,
         max_headers=3,
     )
+
+
+def test_loads_config_from_dotfile(tmp_path: Path):
+    _write_toc_markdown(
+        tmp_path,
+        """
+        [toc-markdown]
+        start_marker = "<!-- DOT -->"
+        header_text = "# Dotfile"
+        """,
+    )
+    nested = tmp_path / "child"
+    nested.mkdir()
+
+    config = load_config(nested)
+
+    assert config.start_marker == "<!-- DOT -->"
+    assert config.header_text == "# Dotfile"
 
 
 def test_load_config_walks_up_directories(tmp_path: Path):
@@ -142,6 +166,44 @@ def test_partial_config_merges_with_defaults(tmp_path: Path):
     defaults = TocConfig()
     assert config.start_marker == defaults.start_marker
     assert config.indent_chars == defaults.indent_chars
+
+
+def test_indent_spaces_sets_indent_chars(tmp_path: Path):
+    _write_pyproject(
+        tmp_path,
+        """
+        [tool.toc-markdown]
+        indent_spaces = 2
+        list_style = "unordered"
+        """,
+    )
+
+    config = load_config(tmp_path)
+
+    assert config.indent_spaces == 2
+    assert config.indent_chars == "  "
+    assert config.list_style == "-"
+
+
+@pytest.mark.parametrize(
+    ("style", "expected"),
+    [
+        ("ordered", "1."),
+        ("unordered", "-"),
+    ],
+)
+def test_list_style_accepts_schema_aliases(tmp_path: Path, style: str, expected: str):
+    _write_pyproject(
+        tmp_path,
+        f"""
+        [tool.toc-markdown]
+        list_style = "{style}"
+        """,
+    )
+
+    config = load_config(tmp_path)
+
+    assert config.list_style == expected
 
 
 @pytest.mark.parametrize(

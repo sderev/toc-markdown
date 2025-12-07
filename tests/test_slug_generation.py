@@ -26,3 +26,8 @@ def test_generate_slug_handles_emojis_and_special_characters():
 
 def test_generate_slug_returns_untitled_for_whitespace_only():
     assert generate_slug("   \n\t ") == "untitled"
+
+
+def test_generate_slug_preserves_unicode_when_requested():
+    assert generate_slug("Café", preserve_unicode=True) == "café"
+    assert generate_slug("Read 📖, Write ✍️, Repeat!", preserve_unicode=True) == "read-📖-write-✍️-repeat"

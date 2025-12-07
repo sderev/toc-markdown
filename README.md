@@ -46,7 +46,7 @@ pip install toc-markdown
 
 ## Configuration
 
-`toc-markdown` reads settings from `[tool.toc-markdown]` in `pyproject.toml`, starting from the target file's directory and walking up the tree. CLI flags override the file, and environment variables still control the size and line-length caps.
+`toc-markdown` reads settings from `[tool.toc-markdown]` in `pyproject.toml` or `[toc-markdown]` in `.toc-markdown.toml`, starting from the target file's directory and walking up the tree. CLI flags override the file, and environment variables still control the size and line-length caps.
 
 Example:
 
@@ -58,17 +58,24 @@ header_text = "## Table of Contents"
 min_level = 2
 max_level = 3
 indent_chars = "    "
+# Alternatively:
+# indent_spaces = 4
 list_style = "1."
+# Or with schema aliases:
+# list_style = "ordered" # same as "1."
+# list_style = "unordered" # same as "-"
 max_file_size = 10485760
 max_line_length = 10000
 max_headers = 10000
+preserve_unicode = false
 ```
 
 CLI overrides:
 
 * `--start-marker`, `--end-marker`, `--header-text`
 * `--min-level`, `--max-level`
-* `--indent-chars`, `--list-style` (`1.`, `*`, or `-`)
+* `--indent-chars`, `--list-style` (`1.`, `*`, `-`, `ordered`, or `unordered`)
+* `--preserve-unicode`
 
 Priority: CLI flags > `pyproject.toml` > defaults. For size caps, `TOC_MARKDOWN_MAX_FILE_SIZE` and `TOC_MARKDOWN_MAX_LINE_LENGTH` still take precedence.
 

@@ -385,6 +385,15 @@ def test_duplicate_unicode_collision():
     assert "1. [Cafe](#cafe-1)\n" in toc
 
 
+def test_generate_toc_preserves_unicode_when_requested():
+    headers = ["## Café Résumé"]
+    config = TocConfig(preserve_unicode=True)
+
+    toc = generate_toc(headers, config)
+
+    assert "1. [Café Résumé](#café-résumé)\n" in toc
+
+
 def test_duplicate_punctuation_collision():
     """Test punctuation removal creates duplicate slugs."""
     headers = [

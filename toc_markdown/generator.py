@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .config import TocConfig, validate_config
+from .config import TocConfig, normalize_config, validate_config
 from .parser import strip_markdown_links
 from .slugify import generate_slug
 
@@ -30,7 +30,7 @@ def generate_toc_entries(headers: list[str], config: TocConfig | None = None) ->
         generate_toc_entries(["# Title", "## Details"], TocConfig(min_level=1))
         generate_toc_entries(["# Header", "# Header", "# Header 1"])
     """
-    config = config or TocConfig()
+    config = normalize_config(config or TocConfig())
     validate_config(config)
 
     toc = [f"{config.start_marker}\n", f"{config.header_text}\n\n"]
@@ -57,7 +57,7 @@ def generate_toc_entries(headers: list[str], config: TocConfig | None = None) ->
         level = len(heading) - len(heading.lstrip("#"))
         title = heading[level:].strip()
         title = strip_markdown_links(title)
-        base_slug = generate_slug(title)
+        base_slug = generate_slug(title, preserve_unicode=config.preserve_unicode)
 
         # Get the next counter for this base slug (GitHub convention: starts at 1)
         # First occurrence gets no suffix (count=0), then -1, -2, etc.

@@ -32,7 +32,16 @@ __all__ = ["cli"]
 @click.option("--min-level", type=int, help="Minimum header level")
 @click.option("--max-level", type=int, help="Maximum header level")
 @click.option("--indent-chars", help="Indentation characters")
-@click.option("--list-style", type=click.Choice(["1.", "*", "-"]), help="List style (1. or * or -)")
+@click.option(
+    "--list-style",
+    type=click.Choice(["1.", "*", "-", "ordered", "unordered"]),
+    help="List style (1., *, -, ordered, or unordered)",
+)
+@click.option(
+    "--preserve-unicode/--no-preserve-unicode",
+    default=None,
+    help="Preserve Unicode characters in generated slugs",
+)
 @click.argument("filepath", type=click.Path(exists=True, dir_okay=False))
 def cli(
     filepath: str,
@@ -43,6 +52,7 @@ def cli(
     max_level: int | None = None,
     indent_chars: str | None = None,
     list_style: str | None = None,
+    preserve_unicode: bool | None = None,
 ):
     """
     Entry point for generating or updating a Markdown table of contents.
@@ -55,7 +65,9 @@ def cli(
         min_level: Smallest header level to include.
         max_level: Largest header level to include.
         indent_chars: Indentation characters for nested entries.
-        list_style: Bullet style to use (`1.`, `*`, or `-`).
+        list_style: Bullet style to use (`1.`, `*`, `-`, `ordered`, or `unordered`).
+        preserve_unicode: Whether to keep Unicode characters in generated slugs.
+            Uses config when omitted.
 
     Returns:
         None.
@@ -84,6 +96,7 @@ def cli(
             max_level=max_level,
             indent_chars=indent_chars,
             list_style=list_style,
+            preserve_unicode=preserve_unicode,
         )
     except ConfigError as error:
         raise click.BadParameter(str(error)) from error

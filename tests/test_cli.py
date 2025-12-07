@@ -203,5 +203,62 @@ def test_cli_flags_override_config(cli_runner, tmp_path, monkeypatch):
     assert result.output.rstrip().endswith("<!-- /CLI -->")
 
 
+def test_cli_accepts_unordered_list_style(cli_runner, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    target = _write(
+        tmp_path,
+        "alias.md",
+        """
+        ## Heading
+        """,
+    )
+
+    result = cli_runner.invoke(cli, ["--list-style", "unordered", str(target)])
+
+    assert result.exit_code == 0
+    assert "- [Heading](#heading)\n" in result.output
+
+
+def test_cli_preserve_unicode_flag(cli_runner, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    target = _write(
+        tmp_path,
+        "unicode.md",
+        """
+        ## Café
+        """,
+    )
+
+    result = cli_runner.invoke(cli, ["--preserve-unicode", str(target)])
+
+    assert result.exit_code == 0
+    assert "[Café](#café)" in result.output
+    assert "#cafe" not in result.output
+
+
+def test_cli_respects_configured_preserve_unicode(cli_runner, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _write_pyproject(
+        tmp_path,
+        """
+        [tool.toc-markdown]
+        preserve_unicode = true
+        """,
+    )
+    target = _write(
+        tmp_path,
+        "unicode-config.md",
+        """
+        ## Café
+        """,
+    )
+
+    result = cli_runner.invoke(cli, [str(target)])
+
+    assert result.exit_code == 0
+    assert "[Café](#café)" in result.output
+    assert "#cafe" not in result.output
+
+
 def test_cli_public_api_excludes_header_pattern():
     assert "HEADER_PATTERN" not in cli_module.__all__
