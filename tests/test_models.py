@@ -4,6 +4,7 @@ from toc_markdown.models import ParserContext, ParserState
 def test_parser_state_members():
     assert list(ParserState) == [
         ParserState.NORMAL,
+        ParserState.IN_TOC,
         ParserState.IN_FENCED_CODE,
         ParserState.IN_INDENTED_CODE,
     ]

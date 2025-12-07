@@ -4,6 +4,8 @@ from toc_markdown.parser import (
     _try_enter_indented_code,
     _try_exit_indented_code,
     _try_open_fence,
+    _try_enter_toc,
+    _try_exit_toc,
 )
 
 
@@ -75,3 +77,34 @@ def test_try_exit_indented_code_handles_transitions():
 
     assert _try_exit_indented_code(ctx, "no longer indented") is False
     assert ctx.state is ParserState.NORMAL
+
+
+def test_try_enter_toc_pushes_end_line():
+    ctx = ParserContext()
+    toc_end_stack: list[int] = []
+    toc_start_to_end = {3: 7}
+
+    assert _try_enter_toc(ctx, 1, toc_start_to_end, toc_end_stack) is False
+    assert ctx.state is ParserState.NORMAL
+    assert toc_end_stack == []
+
+    assert _try_enter_toc(ctx, 3, toc_start_to_end, toc_end_stack) is True
+    assert ctx.state is ParserState.IN_TOC
+    assert toc_end_stack == [7]
+
+
+def test_try_exit_toc_resets_state_after_matching_end():
+    ctx = ParserContext(state=ParserState.IN_TOC)
+    toc_end_stack = [8, 5]
+
+    assert _try_exit_toc(ctx, 4, toc_end_stack) is False
+    assert ctx.state is ParserState.IN_TOC
+    assert toc_end_stack == [8, 5]
+
+    assert _try_exit_toc(ctx, 5, toc_end_stack) is True
+    assert ctx.state is ParserState.IN_TOC
+    assert toc_end_stack == [8]
+
+    assert _try_exit_toc(ctx, 8, toc_end_stack) is True
+    assert ctx.state is ParserState.NORMAL
+    assert toc_end_stack == []

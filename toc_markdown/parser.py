@@ -422,13 +422,56 @@ def _try_exit_indented_code(ctx: ParserContext, line: str) -> bool:
     return False
 
 
+def _try_enter_toc(
+    ctx: ParserContext, line_number: int, toc_start_to_end: dict[int, int], toc_end_stack: list[int]
+) -> bool:
+    """Enter TOC state when the current line starts a validated TOC block.
+
+    Args:
+        ctx: Parser context to update.
+        line_number: Zero-based line number being scanned.
+        toc_start_to_end: Mapping of TOC start line numbers to their matching end lines.
+        toc_end_stack: Stack of TOC end line numbers tracking nested TOC regions.
+
+    Returns:
+        bool: True when the parser enters (or remains in) a TOC region.
+    """
+    end_line = toc_start_to_end.get(line_number)
+    if end_line is None:
+        return False
+
+    toc_end_stack.append(end_line)
+    ctx.state = ParserState.IN_TOC
+    return True
+
+
+def _try_exit_toc(ctx: ParserContext, line_number: int, toc_end_stack: list[int]) -> bool:
+    """Exit TOC state when reaching the matching end marker line.
+
+    Args:
+        ctx: Parser context to update.
+        line_number: Zero-based line number being scanned.
+        toc_end_stack: Stack of TOC end line numbers tracking nested TOC regions.
+
+    Returns:
+        bool: True when the parser exits a TOC region for the current line.
+    """
+    if not toc_end_stack or line_number != toc_end_stack[-1]:
+        return False
+
+    toc_end_stack.pop()
+    ctx.state = ParserState.IN_TOC if toc_end_stack else ParserState.NORMAL
+    return True
+
+
 def parse_markdown(
     content: str, max_line_length: int | None = None, config: TocConfig | None = None
 ) -> ParseResult:
     """Parse Markdown content to extract headers and TOC markers.
 
-    Ignores TOC markers and headers inside code blocks, and enforces header and
-    line-length limits based on the provided configuration.
+    Ignores TOC markers and headers inside code blocks or validated TOC
+    sections, and enforces header and line-length limits based on the provided
+    configuration.
 
     Args:
         content: The markdown content to parse.
@@ -459,44 +502,41 @@ def parse_markdown(
     full_file = content.splitlines(keepends=True)
 
     # Pre-compute TOC coverage so we only skip validated sections.
-    # IMPORTANT: Must track code blocks to avoid detecting markers inside them.
+    # IMPORTANT: Must track both fenced and indented code blocks to avoid
+    # detecting markers inside them.
     toc_stack: list[int] = []
     toc_intervals: list[tuple[int, int]] = []
     precomp_ctx = ParserContext()
 
     for line_number, line in enumerate(full_file):
-        # Check if we're inside a fenced code block
         if precomp_ctx.state is ParserState.IN_FENCED_CODE:
             _try_close_fence(precomp_ctx, line)
             continue
 
-        # Check if this line opens a fenced code block
+        if precomp_ctx.state is ParserState.IN_INDENTED_CODE:
+            if _try_exit_indented_code(precomp_ctx, line):
+                continue
+
         if _try_open_fence(precomp_ctx, line):
             continue
 
-        # Only detect TOC markers outside code blocks
+        if _try_enter_indented_code(precomp_ctx, line):
+            continue
+
         if line.startswith(config.start_marker):
             toc_stack.append(line_number)
         if line.startswith(config.end_marker) and toc_stack:
             start_index = toc_stack.pop()
             toc_intervals.append((start_index, line_number))
 
-    toc_flags = [0] * (len(full_file) + 1)
-    for start_index, end_index in toc_intervals:
-        toc_flags[start_index + 1] += 1
-        toc_flags[end_index + 1] -= 1
-
-    is_line_in_toc: list[bool] = []
-    depth = 0
-    for idx in range(len(full_file)):
-        depth += toc_flags[idx]
-        is_line_in_toc.append(depth > 0)
+    toc_start_to_end = {start: end for start, end in toc_intervals}
 
     headers: list[str] = []
     toc_start_line: int | None = None
     toc_end_line: int | None = None
 
     ctx = ParserContext()
+    toc_end_stack: list[int] = []
 
     for line_number, line in enumerate(full_file):
         # Tracks fenced code blocks (``` or ~~~, including info strings)
@@ -508,6 +548,17 @@ def parse_markdown(
             if _try_exit_indented_code(ctx, line):
                 continue
 
+        if ctx.state is ParserState.IN_TOC:
+            if _try_enter_toc(ctx, line_number, toc_start_to_end, toc_end_stack):
+                toc_start_line = line_number
+                continue
+
+            if _try_exit_toc(ctx, line_number, toc_end_stack):
+                toc_end_line = line_number
+                continue
+
+            continue
+
         if _try_open_fence(ctx, line):
             continue
 
@@ -515,19 +566,27 @@ def parse_markdown(
         if _try_enter_indented_code(ctx, line):
             continue
 
-        # Ignores code blocks and existing TOC header line
-        if ctx.state is not ParserState.NORMAL or line.startswith(config.header_text):
+        # Ignores existing TOC header line
+        if line.startswith(config.header_text):
             continue
 
         # Enforce line length outside TOC sections
-        if not is_line_in_toc[line_number]:
-            line_len = len(line)
-            if line.endswith("\n"):
+        line_len = len(line)
+        if line.endswith("\n"):
+            line_len -= 1
+            if line_len > 0 and line[line_len - 1] == "\r":
                 line_len -= 1
-                if line_len > 0 and line[line_len - 1] == "\r":
-                    line_len -= 1
-            if line_len > effective_max_line_length:
-                raise LineTooLongError(line_number + 1, effective_max_line_length)
+        if line_len > effective_max_line_length:
+            raise LineTooLongError(line_number + 1, effective_max_line_length)
+
+        if line.startswith(config.start_marker):
+            toc_start_line = line_number
+            if _try_enter_toc(ctx, line_number, toc_start_to_end, toc_end_stack):
+                continue
+
+        if line.startswith(config.end_marker):
+            toc_end_line = line_number
+            continue
 
         # Finds headers
         header_match = header_pattern.match(line)

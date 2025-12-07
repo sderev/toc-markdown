@@ -232,6 +232,71 @@ def test_mixed_real_and_fake_toc_markers(tmp_path: Path):
     assert toc_end == 2
 
 
+def test_toc_markers_in_indented_code_block_ignored(tmp_path: Path):
+    target = _write_markdown(
+        tmp_path,
+        f"""
+        ## Heading 1
+            code line
+            {TOC_START_MARKER}
+            fake toc
+            {TOC_END_MARKER}
+        ## Heading 2
+        """,
+    )
+
+    _, headers, toc_start, toc_end = parse_file(target, DEFAULT_MAX_LINE_LENGTH)
+    assert headers == ["## Heading 1", "## Heading 2"]
+    assert toc_start is None
+    assert toc_end is None
+
+
+def test_headers_inside_toc_not_parsed(tmp_path: Path):
+    target = _write_markdown(
+        tmp_path,
+        f"""
+        ## Before
+        {TOC_START_MARKER}
+        ## Inside TOC
+        {TOC_END_MARKER}
+        ### After
+        """,
+    )
+
+    _, headers, toc_start, toc_end = parse_file(target, DEFAULT_MAX_LINE_LENGTH)
+    assert headers == ["## Before", "### After"]
+    assert toc_start == 1
+    assert toc_end == 3
+
+
+def test_toc_markers_mixed_with_indented_and_fenced_code(tmp_path: Path):
+    content = "\n".join(
+        [
+            "## Heading 1",
+            "    code line",
+            "    <!-- TOC -->",
+            "    code toc content",
+            "    <!-- /TOC -->",
+            "```",
+            "<!-- TOC -->",
+            "## fenced toc heading",
+            "<!-- /TOC -->",
+            "```",
+            "<!-- TOC -->",
+            "## Real TOC heading",
+            "<!-- /TOC -->",
+            "## Heading 2",
+            "",
+        ]
+    )
+
+    result = parse_markdown(content)
+
+    assert result.headers == ["## Heading 1", "## Heading 2"]
+    assert result.toc_start_line == 10
+    assert result.toc_end_line == 12
+
+
 def test_parse_markdown_cycles_fence_state_back_to_normal():
     content = "\n".join(
         [

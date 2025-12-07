@@ -11,11 +11,13 @@ class ParserState(Enum):
 
     Attributes:
         NORMAL: Default state for regular text.
+        IN_TOC: Inside a validated TOC region.
         IN_FENCED_CODE: Inside a fenced code block.
         IN_INDENTED_CODE: Inside an indented code block.
     """
 
     NORMAL = auto()
+    IN_TOC = auto()
     IN_FENCED_CODE = auto()
     IN_INDENTED_CODE = auto()
 
