@@ -497,7 +497,11 @@ def parse_markdown(
     effective_max_line_length = (
         config.max_line_length if max_line_length is None else max_line_length
     )
-    header_pattern = re.compile(rf"^(#{{{config.min_level},{config.max_level}}}) (.*)$")
+    # CommonMark ATX headings require a space/tab after the hashes, unless the
+    # hashes are immediately followed by end-of-line (empty heading).
+    header_pattern = re.compile(
+        rf"^(#{{{config.min_level},{config.max_level}}})(?:[ \t]+(.*)|[ \t]*)$"
+    )
 
     full_file = content.splitlines(keepends=True)
 

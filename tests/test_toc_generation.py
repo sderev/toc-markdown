@@ -44,6 +44,32 @@ def test_generate_toc_empty_headers():
     ]
 
 
+def test_generate_toc_skips_empty_titles():
+    headers = ["##   ", "## Valid", "###\t\t", "### Child", "##\t"]
+    toc = generate_toc(headers)
+
+    assert toc == [
+        f"{TOC_START_MARKER}\n",
+        "## Table of Contents\n\n",
+        "1. [Valid](#valid)\n",
+        "    1. [Child](#child)\n",
+        f"{TOC_END_MARKER}\n",
+    ]
+
+
+def test_generate_toc_deduplication_ignores_empty_titles():
+    headers = ["## Title", "##   ", "## Title"]
+    toc = generate_toc(headers)
+
+    assert toc == [
+        f"{TOC_START_MARKER}\n",
+        "## Table of Contents\n\n",
+        "1. [Title](#title)\n",
+        "1. [Title](#title-1)\n",
+        f"{TOC_END_MARKER}\n",
+    ]
+
+
 def test_generate_toc_single_link_in_header():
     """Test that a header with a single link extracts only the link text."""
     headers = ["## [Link Text](https://example.com)"]

@@ -399,3 +399,66 @@ def test_parse_markdown_respects_configured_levels():
         "### Heading 3",
         "#### Heading 4",
     ]
+
+
+def test_parse_markdown_handles_headers_with_multiple_spaces():
+    """Headers with multiple spaces after # should be recognized (CommonMark compliant)."""
+    content = "\n".join(
+        [
+            "##   Title with two spaces",
+            "###    Title with three spaces",
+            "## Normal single space",
+            "",
+        ]
+    )
+
+    result = parse_markdown(content)
+
+    assert result.headers == [
+        "##   Title with two spaces",
+        "###    Title with three spaces",
+        "## Normal single space",
+    ]
+
+
+def test_parse_markdown_handles_headers_with_tabs():
+    """Headers with tabs after # should be recognized (CommonMark compliant)."""
+    content = "##\tTitle with tab\n###\t\tTitle with two tabs\n## Normal\n"
+
+    result = parse_markdown(content)
+
+    assert result.headers == [
+        "##\tTitle with tab",
+        "###\t\tTitle with two tabs",
+        "## Normal",
+    ]
+
+
+def test_parse_markdown_handles_headers_with_mixed_whitespace():
+    """Headers with mixed spaces and tabs after # should be recognized."""
+    content = "## \t Space then tab\n## \t \t Mixed whitespace\n"
+
+    result = parse_markdown(content)
+
+    assert result.headers == [
+        "## \t Space then tab",
+        "## \t \t Mixed whitespace",
+    ]
+
+
+def test_parse_markdown_allows_empty_headers():
+    """Whitespace-only heading text after # is still a valid heading."""
+    content = "##\n###\n##   \n###\t\t\n## Normal\n"
+
+    result = parse_markdown(content)
+
+    assert result.headers == ["##", "###", "##   ", "###\t\t", "## Normal"]
+
+
+def test_parse_markdown_requires_whitespace_after_hashes():
+    """Headings must have at least one space or tab after the hashes."""
+    content = "##NoSpace\n## Valid\n"
+
+    result = parse_markdown(content)
+
+    assert result.headers == ["## Valid"]

@@ -57,6 +57,8 @@ def generate_toc_entries(headers: list[str], config: TocConfig | None = None) ->
         level = len(heading) - len(heading.lstrip("#"))
         title = heading[level:].strip()
         title = strip_markdown_links(title)
+        if not title:
+            continue
         base_slug = generate_slug(title, preserve_unicode=config.preserve_unicode)
 
         # Get the next counter for this base slug (GitHub convention: starts at 1)
