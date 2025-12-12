@@ -175,6 +175,25 @@ def test_parse_file_tracks_toc_markers(tmp_path: Path):
     assert toc_end == 4
 
 
+def test_parse_file_ignores_existing_toc_header_when_header_text_changes(tmp_path: Path):
+    target = _write_markdown(
+        tmp_path,
+        f"""
+        {TOC_START_MARKER}
+        ## Table of Contents
+
+        1. [Section](#section)
+        {TOC_END_MARKER}
+
+        ## Section
+        """,
+    )
+    config = TocConfig(header_text="## Contents")
+
+    _, headers, _, _ = parse_file(target, DEFAULT_MAX_LINE_LENGTH, config)
+    assert headers == ["## Section"]
+
+
 def test_parse_file_handles_empty_file(tmp_path: Path):
     target = tmp_path / "empty.md"
     target.write_text("", encoding="utf-8")

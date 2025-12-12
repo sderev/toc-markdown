@@ -61,6 +61,32 @@ def test_cli_updates_existing_toc(cli_runner, tmp_path, monkeypatch):
     assert result.output == ""
 
 
+def test_cli_updates_existing_toc_when_header_text_changes(cli_runner, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    target = _write(
+        tmp_path,
+        "update-header.md",
+        f"""
+        {TOC_START_MARKER}
+        ## Table of Contents
+
+        1. Old entry
+        {TOC_END_MARKER}
+
+        ## Section
+        """,
+    )
+
+    result = cli_runner.invoke(cli, ["--header-text", "## Contents", str(target)])
+
+    assert result.exit_code == 0
+    contents = target.read_text(encoding="utf-8")
+    assert "## Contents" in contents
+    assert "## Table of Contents" not in contents
+    assert "1. [Section](#section)" in contents
+    assert "[Table of Contents](#table-of-contents)" not in contents
+
+
 def test_cli_rejects_non_markdown_files(cli_runner, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     target = _write(
