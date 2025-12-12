@@ -4,8 +4,14 @@ import textwrap
 from pathlib import Path
 
 import pytest
-from toc_markdown.constants import CODE_FENCE, DEFAULT_MAX_LINE_LENGTH, TOC_END_MARKER, TOC_START_MARKER
+
 from toc_markdown.config import TocConfig
+from toc_markdown.constants import (
+    CODE_FENCE,
+    DEFAULT_MAX_LINE_LENGTH,
+    TOC_END_MARKER,
+    TOC_START_MARKER,
+)
 from toc_markdown.parser import ParseFileError, parse_file, parse_markdown
 
 

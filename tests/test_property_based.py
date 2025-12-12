@@ -4,6 +4,7 @@ import string
 
 from hypothesis import assume, given
 from hypothesis import strategies as st
+
 from toc_markdown.constants import CLOSING_FENCE_MAX_INDENT
 from toc_markdown.generator import generate_toc_entries as generate_toc
 from toc_markdown.models import ParserContext, ParserState

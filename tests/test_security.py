@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
+
 import toc_markdown.cli as cli_module
 
 

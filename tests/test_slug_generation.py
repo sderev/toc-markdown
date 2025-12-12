@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+
 from toc_markdown.slugify import generate_slug
 
 
@@ -30,4 +31,7 @@ def test_generate_slug_returns_untitled_for_whitespace_only():
 
 def test_generate_slug_preserves_unicode_when_requested():
     assert generate_slug("Café", preserve_unicode=True) == "café"
-    assert generate_slug("Read 📖, Write ✍️, Repeat!", preserve_unicode=True) == "read-📖-write-✍️-repeat"
+    assert (
+        generate_slug("Read 📖, Write ✍️, Repeat!", preserve_unicode=True)
+        == "read-📖-write-✍️-repeat"
+    )

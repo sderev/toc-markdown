@@ -8,6 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import click
+
 from .config import ConfigError, build_config
 from .filesystem import (
     collect_file_stat,
@@ -18,7 +19,8 @@ from .filesystem import (
     normalize_filepath,
     update_toc,
 )
-from .generator import generate_toc_entries as generate_toc, validate_toc_markers
+from .generator import generate_toc_entries as generate_toc
+from .generator import validate_toc_markers
 from .parser import ParseFileError, parse_file
 
 __all__ = ["cli"]

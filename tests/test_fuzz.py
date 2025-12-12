@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 
 import pytest
+
 from toc_markdown.constants import TOC_END_MARKER, TOC_START_MARKER
 from toc_markdown.generator import generate_toc_entries as generate_toc
 from toc_markdown.slugify import generate_slug

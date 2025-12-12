@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import textwrap
-import pytest
 from pathlib import Path
+
+import pytest
 
 from toc_markdown.config import ConfigError, TocConfig, load_config, validate_config
 

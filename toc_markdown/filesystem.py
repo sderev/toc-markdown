@@ -44,9 +44,7 @@ def get_max_file_size(default: int = DEFAULT_MAX_FILE_SIZE) -> int:
         raise ValueError(error_message) from error
 
     if max_size <= 0:
-        error_message = (
-            f"{MAX_FILE_SIZE_ENV_VAR} must be a positive integer, got {max_size}."
-        )
+        error_message = f"{MAX_FILE_SIZE_ENV_VAR} must be a positive integer, got {max_size}."
         raise ValueError(error_message)
 
     return max_size
@@ -82,9 +80,7 @@ def get_max_line_length(default: int = DEFAULT_MAX_LINE_LENGTH) -> int:
         raise ValueError(error_message) from error
 
     if max_length <= 0:
-        error_message = (
-            f"{MAX_LINE_LENGTH_ENV_VAR} must be a positive integer, got {max_length}."
-        )
+        error_message = f"{MAX_LINE_LENGTH_ENV_VAR} must be a positive integer, got {max_length}."
         raise ValueError(error_message)
 
     return max_length
@@ -151,9 +147,7 @@ def normalize_filepath(raw_path: str, base_dir: Path) -> Path:
     try:
         resolved.relative_to(base_dir)
     except ValueError as error:
-        error_message = (
-            f"{resolved} is outside of the working directory {base_dir}."
-        )
+        error_message = f"{resolved} is outside of the working directory {base_dir}."
         raise ValueError(error_message) from error
 
     if resolved.suffix.lower() not in MARKDOWN_EXTENSIONS:

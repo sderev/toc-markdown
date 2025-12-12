@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import tomllib
 from dataclasses import dataclass, replace
 from pathlib import Path
-import tomllib
+
 
 @dataclass
 class TocConfig:

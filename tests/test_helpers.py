@@ -6,6 +6,7 @@ import stat
 from pathlib import Path
 
 import pytest
+
 from toc_markdown.filesystem import (
     collect_file_stat,
     contains_symlink,

@@ -2,10 +2,10 @@ from toc_markdown.models import ParserContext, ParserState
 from toc_markdown.parser import (
     _try_close_fence,
     _try_enter_indented_code,
-    _try_exit_indented_code,
-    _try_open_fence,
     _try_enter_toc,
+    _try_exit_indented_code,
     _try_exit_toc,
+    _try_open_fence,
 )
 
 

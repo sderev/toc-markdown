@@ -9,7 +9,7 @@ from .config import ConfigError, TocConfig, validate_config
 from .constants import CLOSING_FENCE_MAX_INDENT, CODE_FENCE_PATTERN
 from .exceptions import LineTooLongError, ParseError, TooManyHeadersError
 from .filesystem import safe_read
-from .models import ParseResult, ParserContext, ParserState
+from .models import ParserContext, ParseResult, ParserState
 
 
 def is_escaped(text: str, pos: int) -> bool:
