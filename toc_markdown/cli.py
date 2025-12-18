@@ -117,7 +117,7 @@ def cli(
 
     try:
         full_file, headers, toc_start_line, toc_end_line = parse_file(
-            filepath, max_line_length, config
+            filepath, max_line_length, config, max_file_size=max_file_size
         )
     except (ParseFileError, ConfigError) as error:
         raise click.ClickException(str(error)) from error

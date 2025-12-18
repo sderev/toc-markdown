@@ -40,7 +40,7 @@ pip install toc-markdown
 * Only regular Markdown files (`.md`, `.markdown`) are accepted.
 * Run the CLI from the directory tree that owns the target file—files outside the current working directory are rejected to prevent path traversal.
 * Symlinks (whether the target or any parent path) are refused.
-* Files larger than 10 MiB are rejected. Override via `TOC_MARKDOWN_MAX_FILE_SIZE=<bytes>` if you need a higher cap.
+* Files larger than 10 MiB are rejected. Increase the cap via `max_file_size` or `TOC_MARKDOWN_MAX_FILE_SIZE=<bytes>` (up to 100 MiB).
 * Files must be valid UTF-8. Invalid byte sequences abort processing to avoid corrupt output.
 * Updates happen through a temporary file in the same directory; contents are flushed, synced, and atomically swapped while preserving permissions.
 

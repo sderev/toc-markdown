@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from toc_markdown.config import MAX_CONFIGURED_FILE_SIZE
 from toc_markdown.filesystem import (
     collect_file_stat,
     contains_symlink,
@@ -28,6 +29,13 @@ def test_get_max_file_size_rejects_non_positive(monkeypatch):
     monkeypatch.setenv("TOC_MARKDOWN_MAX_FILE_SIZE", "0")
     with pytest.raises(ValueError):
         get_max_file_size()
+
+
+def test_get_max_file_size_rejects_too_large(monkeypatch):
+    monkeypatch.setenv("TOC_MARKDOWN_MAX_FILE_SIZE", str(MAX_CONFIGURED_FILE_SIZE + 1))
+    with pytest.raises(ValueError) as exc_info:
+        get_max_file_size()
+    assert "TOC_MARKDOWN_MAX_FILE_SIZE must be <=" in str(exc_info.value)
 
 
 def test_get_max_line_length_rejects_non_integer(monkeypatch):
