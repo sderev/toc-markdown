@@ -7,13 +7,22 @@ name = "toc-markdown"
 version = "0.0.2"
 description = "Generate a table of contents for a Markdown file."
 readme = "README.md"
-license = {text = "Apache Licence, Version 2.0"}
+license = {file = "LICENSE"}
 authors = [
     {name = "Sébastien De Revière"}
 ]
 requires-python = ">=3.11"
 dependencies = [
     "click",
+]
+classifiers = [
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
 ]
 
 [project.urls]
@@ -23,6 +32,9 @@ Changelog = "https://github.com/sderev/toc-markdown/releases"
 
 [project.scripts]
 toc-markdown = "toc_markdown.cli:cli"
+
+[tool.hatch.build.targets.wheel]
+packages = ["toc_markdown"]
 
 [dependency-groups]
 dev = [
