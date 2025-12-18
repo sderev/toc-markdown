@@ -541,6 +541,7 @@ def parse_markdown(
 
     ctx = ParserContext()
     toc_end_stack: list[int] = []
+    header_text = config.header_text.rstrip(" \t")
 
     for line_number, line in enumerate(full_file):
         # Tracks fenced code blocks (``` or ~~~, including info strings)
@@ -570,8 +571,9 @@ def parse_markdown(
         if _try_enter_indented_code(ctx, line):
             continue
 
-        # Ignores existing TOC header line
-        if line.startswith(config.header_text):
+        # Ignores existing TOC header line.
+        # Match the full line to avoid skipping headings that only share a prefix.
+        if line.rstrip("\r\n").rstrip(" \t") == header_text:
             continue
 
         # Enforce line length outside TOC sections

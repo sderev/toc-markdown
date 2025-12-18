@@ -200,6 +200,20 @@ def test_parse_file_ignores_existing_toc_header_when_header_text_changes(tmp_pat
     assert headers == ["## Section"]
 
 
+def test_parse_file_skips_only_exact_toc_header_text(tmp_path: Path):
+    target = _write_markdown(
+        tmp_path,
+        """
+        ## Table of Contents
+        ## Table of Contents Appendix
+        ## Another
+        """,
+    )
+
+    _, headers, _, _ = parse_file(target, DEFAULT_MAX_LINE_LENGTH)
+    assert headers == ["## Table of Contents Appendix", "## Another"]
+
+
 def test_parse_file_handles_empty_file(tmp_path: Path):
     target = tmp_path / "empty.md"
     target.write_text("", encoding="utf-8")
