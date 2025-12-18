@@ -5,7 +5,13 @@ from pathlib import Path
 
 import pytest
 
-from toc_markdown.config import ConfigError, TocConfig, load_config, validate_config
+from toc_markdown.config import (
+    MAX_CONFIGURED_FILE_SIZE,
+    ConfigError,
+    TocConfig,
+    load_config,
+    validate_config,
+)
 
 
 def _write_pyproject(base: Path, body: str) -> Path:
@@ -219,6 +225,7 @@ def test_list_style_accepts_schema_aliases(tmp_path: Path, style: str, expected:
         TocConfig(indent_chars=""),
         TocConfig(list_style="?"),
         TocConfig(max_file_size=0),
+        TocConfig(max_file_size=MAX_CONFIGURED_FILE_SIZE + 1),
         TocConfig(max_line_length=-1),
         TocConfig(max_headers=0),
     ],

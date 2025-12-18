@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import os
 import stat
 import tempfile
@@ -9,6 +10,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TextIO
 
+from .config import MAX_CONFIGURED_FILE_SIZE
 from .constants import DEFAULT_MAX_FILE_SIZE, DEFAULT_MAX_LINE_LENGTH, MARKDOWN_EXTENSIONS
 
 MAX_FILE_SIZE_ENV_VAR = "TOC_MARKDOWN_MAX_FILE_SIZE"
@@ -25,7 +27,8 @@ def get_max_file_size(default: int = DEFAULT_MAX_FILE_SIZE) -> int:
         int: Maximum allowed file size in bytes.
 
     Raises:
-        ValueError: If the environment value is not a positive integer.
+        ValueError: If the environment value is not a positive integer or exceeds
+            the hard-capped maximum.
 
     Examples:
         os.environ["TOC_MARKDOWN_MAX_FILE_SIZE"] = "204800"
@@ -45,6 +48,12 @@ def get_max_file_size(default: int = DEFAULT_MAX_FILE_SIZE) -> int:
 
     if max_size <= 0:
         error_message = f"{MAX_FILE_SIZE_ENV_VAR} must be a positive integer, got {max_size}."
+        raise ValueError(error_message)
+
+    if max_size > MAX_CONFIGURED_FILE_SIZE:
+        error_message = (
+            f"{MAX_FILE_SIZE_ENV_VAR} must be <= {MAX_CONFIGURED_FILE_SIZE} bytes, got {max_size}."
+        )
         raise ValueError(error_message)
 
     return max_size
@@ -128,7 +137,7 @@ def normalize_filepath(raw_path: str, base_dir: Path) -> Path:
     path = Path(raw_path).expanduser()
 
     if contains_symlink(path):
-        error_message = f"Symlinks are not supported for security reasons: {path}"
+        error_message = f"Symlinks are not supported: {path}."
         raise ValueError(error_message)
 
     try:
@@ -265,16 +274,32 @@ def safe_read(filepath: Path) -> TextIO:
         with safe_read(Path("README.md")) as handle:
             first_line = handle.readline()
     """
+    flags = os.O_RDONLY
+    if hasattr(os, "O_BINARY"):
+        flags |= os.O_BINARY
+    if hasattr(os, "O_CLOEXEC"):
+        flags |= os.O_CLOEXEC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    if hasattr(os, "O_NONBLOCK"):
+        flags |= os.O_NONBLOCK
+
     try:
-        return open(filepath, "r", encoding="UTF-8")
-    except (
-        FileNotFoundError,
-        PermissionError,
-        IsADirectoryError,
-        NotADirectoryError,
-    ) as error:
+        fd = os.open(filepath, flags)
+    except OSError as error:
+        if error.errno == errno.ELOOP:
+            raise IOError(f"Symlinks are not supported: {filepath}.") from error
         error_message = f"Error accessing {filepath}: {error}"
         raise IOError(error_message) from error
+
+    try:
+        file_stat = os.fstat(fd)
+        if not stat.S_ISREG(file_stat.st_mode):
+            raise IOError(f"{filepath} is not a regular file.")
+        return os.fdopen(fd, "r", encoding="utf-8")
+    except Exception:
+        os.close(fd)
+        raise
 
 
 def update_toc(

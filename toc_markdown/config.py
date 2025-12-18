@@ -6,6 +6,8 @@ import tomllib
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+MAX_CONFIGURED_FILE_SIZE = 100 * 1024 * 1024
+
 
 @dataclass
 class TocConfig:
@@ -21,7 +23,7 @@ class TocConfig:
         indent_spaces: Number of spaces used for indentation (new schema).
         list_style: Bullet style for list items (``"1."``, ``"*"``, ``"-"``,
             or schema aliases ``"ordered"``/``"unordered"``).
-        max_file_size: Maximum file size in bytes that will be processed.
+        max_file_size: Maximum file size in bytes that will be processed (hard-capped to 100 MiB).
         max_line_length: Maximum line length allowed during parsing.
         max_headers: Maximum number of headers that will be included.
         preserve_unicode: Whether to keep Unicode characters in generated slugs.
@@ -238,6 +240,11 @@ def validate_config(config: TocConfig) -> None:
         )
     except TypeError as error:
         raise ConfigError("numeric limits must be positive integers") from error
+
+    if config.max_file_size > MAX_CONFIGURED_FILE_SIZE:
+        raise ConfigError(
+            f"`max_file_size` must be <= {MAX_CONFIGURED_FILE_SIZE} bytes, got {config.max_file_size}"
+        )
 
 
 def apply_overrides(config: TocConfig, **overrides: object) -> TocConfig:

@@ -77,6 +77,20 @@ def test_file_size_limit_enforced(cli_runner, tmp_path, monkeypatch):
     assert "maximum allowed size" in error_text
 
 
+def test_file_size_limit_enforced_on_actual_read(cli_runner, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("TOC_MARKDOWN_MAX_FILE_SIZE", "10")
+
+    target = tmp_path / "target.md"
+    target.write_text("X" * 20, encoding="utf-8")
+
+    monkeypatch.setattr(cli_module, "enforce_file_size", lambda *args, **kwargs: None)
+
+    result = cli_runner.invoke(cli_module.cli, [str(target)])
+    assert result.exit_code != 0
+    assert "maximum allowed size" in _error_text(result)
+
+
 def test_line_length_limit_enforced(cli_runner, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     # Create a file with a line exceeding MAX_LINE_LENGTH (10,000 characters)
@@ -544,8 +558,8 @@ def test_race_condition_detection(cli_runner, tmp_path, monkeypatch):
 
     original_parse = cli_module.parse_file
 
-    def _parse_and_mutate(path: Path, max_line_length: int, config=None):
-        result = original_parse(path, max_line_length, config)
+    def _parse_and_mutate(path: Path, max_line_length: int, config=None, max_file_size=None):
+        result = original_parse(path, max_line_length, config, max_file_size=max_file_size)
         existing = path.read_text(encoding="utf-8")
         path.write_text(existing + "\n## Mutated\n", encoding="utf-8")
         return result

@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import errno
+import os
 import re
+import stat
 from pathlib import Path
 
-from .config import ConfigError, TocConfig, validate_config
+from .config import MAX_CONFIGURED_FILE_SIZE, ConfigError, TocConfig, validate_config
 from .constants import CLOSING_FENCE_MAX_INDENT, CODE_FENCE_PATTERN
 from .exceptions import LineTooLongError, ParseError, TooManyHeadersError
-from .filesystem import safe_read
 from .models import ParserContext, ParseResult, ParserState
 
 
@@ -625,11 +627,14 @@ def parse_file(
     filepath: Path,
     max_line_length: int | None = None,
     config: TocConfig | None = None,
+    max_file_size: int | None = None,
 ) -> tuple[list[str], list[str], int | None, int | None]:
     """Parse a Markdown file and extract TOC metadata.
 
     Args:
         filepath: Path to the markdown file to parse.
+        max_file_size: Optional override for the maximum allowed file size in
+            bytes.
         max_line_length: Optional override for the maximum allowed line length
             (excluding line endings).
         config: Configuration controlling parsing behavior; defaults to a new
@@ -653,21 +658,81 @@ def parse_file(
     except ConfigError as error:
         raise ParseFileError(str(error)) from error
 
+    effective_max_file_size = config.max_file_size if max_file_size is None else max_file_size
+    if (
+        isinstance(effective_max_file_size, bool)
+        or not isinstance(effective_max_file_size, int)
+        or effective_max_file_size <= 0
+    ):
+        raise ParseFileError("`max_file_size` override must be a positive integer")
+    if max_file_size is not None and effective_max_file_size > MAX_CONFIGURED_FILE_SIZE:
+        raise ParseFileError(
+            f"`max_file_size` override must be <= {MAX_CONFIGURED_FILE_SIZE} bytes, got {effective_max_file_size}"
+        )
+
     effective_max_line_length = (
         config.max_line_length if max_line_length is None else max_line_length
     )
-    if effective_max_line_length <= 0:
+    if (
+        isinstance(effective_max_line_length, bool)
+        or not isinstance(effective_max_line_length, int)
+        or effective_max_line_length <= 0
+    ):
         raise ParseFileError("`max_line_length` override must be a positive integer")
 
+    def file_size_error_message(max_size: int) -> str:
+        return f"{filepath} exceeds the maximum allowed size of {max_size} bytes."
+
     # Read file content
+    fd: int | None = None
     try:
-        with safe_read(filepath) as file:
-            content = file.read()
+        flags = os.O_RDONLY
+        if hasattr(os, "O_BINARY"):
+            flags |= os.O_BINARY
+        if hasattr(os, "O_CLOEXEC"):
+            flags |= os.O_CLOEXEC
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        if hasattr(os, "O_NONBLOCK"):
+            flags |= os.O_NONBLOCK
+
+        try:
+            fd = os.open(filepath, flags)
+        except OSError as error:
+            if error.errno == errno.ELOOP:
+                raise ParseFileError(f"Symlinks are not supported: {filepath}.") from error
+            raise
+
+        try:
+            file = os.fdopen(fd, "rb")
+        except Exception:
+            os.close(fd)
+            fd = None
+            raise
+
+        with file:
+            fd = None
+            file_stat = os.fstat(file.fileno())
+            if not stat.S_ISREG(file_stat.st_mode):
+                raise ParseFileError(f"{filepath} is not a regular file.")
+            if file_stat.st_size > effective_max_file_size:
+                raise ParseFileError(file_size_error_message(effective_max_file_size))
+
+            raw = file.read(effective_max_file_size + 1)
+            if len(raw) > effective_max_file_size:
+                raise ParseFileError(file_size_error_message(effective_max_file_size))
+
+            content = raw.decode("utf-8")
+            content = content.replace("\r\n", "\n").replace("\r", "\n")
     except UnicodeDecodeError as error:
         error_message = f"Invalid UTF-8 sequence in {filepath}: {error}"
         raise ParseFileError(error_message) from error
-    except IOError as error:
-        raise ParseFileError(str(error)) from error
+    except OSError as error:
+        error_message = f"Error accessing {filepath}: {error}"
+        raise ParseFileError(error_message) from error
+    finally:
+        if fd is not None:
+            os.close(fd)
 
     # Parse content using pure function
     try:
