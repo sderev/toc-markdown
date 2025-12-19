@@ -378,6 +378,8 @@ def update_toc(
                         )
 
         # Replace the original file with the temporary file (atomic operation)
+        current_stat = collect_file_stat(filepath)
+        ensure_file_unchanged(expected_stat, current_stat, filepath)
         os.replace(temp_path, filepath)
 
         # Preserve access time (mtime intentionally NOT preserved to reflect actual modification)

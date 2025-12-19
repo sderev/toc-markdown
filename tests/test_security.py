@@ -571,6 +571,46 @@ def test_race_condition_detection(cli_runner, tmp_path, monkeypatch):
     assert "changed during processing" in _error_text(result)
 
 
+def test_race_condition_detection_during_replace(cli_runner, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    target = _write(
+        tmp_path,
+        "race-replace.md",
+        """
+        <!-- TOC -->
+        ## Table of Contents
+
+        1. Old entry
+        <!-- /TOC -->
+        ## Heading
+        """,
+    )
+
+    import toc_markdown.filesystem as filesystem_module
+
+    original_collect = filesystem_module.collect_file_stat
+    call_counter = {"count": 0}
+
+    def _collect_and_mutate(path: Path) -> os.stat_result:
+        call_counter["count"] += 1
+        if call_counter["count"] == 2:
+            existing = path.read_text(encoding="utf-8")
+            path.write_text(existing + "\n## Concurrent edit\n", encoding="utf-8")
+        return original_collect(path)
+
+    monkeypatch.setattr(filesystem_module, "collect_file_stat", _collect_and_mutate)
+
+    result = cli_runner.invoke(cli_module.cli, [str(target)])
+    assert result.exit_code != 0
+    assert "changed during processing" in _error_text(result)
+
+    content = target.read_text(encoding="utf-8")
+    assert "## Concurrent edit" in content
+
+    other_paths = [path for path in tmp_path.iterdir() if path != target]
+    assert other_paths == []
+
+
 @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="mkfifo not available")
 def test_fifo_rejected(cli_runner, tmp_path, monkeypatch):
     """Test that FIFOs (named pipes) are rejected to prevent DoS via blocking reads."""
