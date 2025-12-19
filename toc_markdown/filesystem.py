@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import errno
+import io
 import os
 import stat
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
-from typing import TextIO
 
 from .config import MAX_CONFIGURED_FILE_SIZE
 from .constants import DEFAULT_MAX_FILE_SIZE, DEFAULT_MAX_LINE_LENGTH, MARKDOWN_EXTENSIONS
@@ -258,14 +258,14 @@ def ensure_file_unchanged(
         raise IOError(error_message)
 
 
-def safe_read(filepath: Path) -> TextIO:
+def safe_read(filepath: Path) -> io.TextIOBase:
     """Open a file for reading with consistent error handling.
 
     Args:
         filepath: Path to the file.
 
     Returns:
-        TextIO: File handle opened for reading in UTF-8.
+        io.TextIOBase: File handle opened for reading in UTF-8.
 
     Raises:
         IOError: If the path is missing, inaccessible, or not a file.
