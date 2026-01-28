@@ -41,6 +41,7 @@ dev = [
     "pytest>=8.0",
     "pytest-cov>=6.0",
     "hypothesis>=6.0",
+    "scriv>=1.8.0",
 ]
 
 # Fuzz testing with atheris (Python 3.11 only)
