@@ -288,3 +288,64 @@ def test_cli_respects_configured_preserve_unicode(cli_runner, tmp_path, monkeypa
 
 def test_cli_public_api_excludes_header_pattern():
     assert "HEADER_PATTERN" not in cli_module.__all__
+
+
+def test_cli_handles_config_error(cli_runner, tmp_path, monkeypatch):
+    """Test that CLI catches ConfigError and raises click.BadParameter."""
+    monkeypatch.chdir(tmp_path)
+    _write_pyproject(
+        tmp_path,
+        """
+        [tool.toc-markdown]
+        min_level = 5
+        max_level = 2
+        """,
+    )
+    target = _write(
+        tmp_path,
+        "doc.md",
+        """
+        ## Heading
+        """,
+    )
+
+    result = cli_runner.invoke(cli, [str(target)])
+
+    assert result.exit_code != 0
+    assert "max_level` must be >= `min_level" in result.output
+
+
+def test_cli_handles_invalid_max_line_length_env(cli_runner, tmp_path, monkeypatch):
+    """Test that CLI handles get_max_line_length ValueError."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("TOC_MARKDOWN_MAX_LINE_LENGTH", "invalid")
+    target = _write(
+        tmp_path,
+        "doc.md",
+        """
+        ## Heading
+        """,
+    )
+
+    result = cli_runner.invoke(cli, [str(target)])
+
+    assert result.exit_code != 0
+    assert "Invalid value for TOC_MARKDOWN_MAX_LINE_LENGTH" in result.output
+
+
+def test_cli_handles_negative_max_line_length_env(cli_runner, tmp_path, monkeypatch):
+    """Test that CLI handles negative max_line_length ValueError."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("TOC_MARKDOWN_MAX_LINE_LENGTH", "-1")
+    target = _write(
+        tmp_path,
+        "doc.md",
+        """
+        ## Heading
+        """,
+    )
+
+    result = cli_runner.invoke(cli, [str(target)])
+
+    assert result.exit_code != 0
+    assert "TOC_MARKDOWN_MAX_LINE_LENGTH must be a positive integer" in result.output

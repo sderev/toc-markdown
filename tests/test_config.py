@@ -248,3 +248,101 @@ def test_validate_config_rejects_invalid_values(config: TocConfig):
 def test_validate_config_rejects_non_numeric_limits(config: TocConfig):
     with pytest.raises(ConfigError):
         validate_config(config)
+
+
+def test_load_config_handles_non_dict_table(tmp_path: Path):
+    """Test that config loading errors when table is not a dict (line 154)."""
+    _write_pyproject(
+        tmp_path,
+        """
+        [tool.toc-markdown]
+        start_marker = "test"
+        """,
+    )
+    # Write a pyproject.toml with non-dict table by directly writing invalid TOML structure
+    # Actually, we need to create a case where raw_config is not a dict
+    # This happens when the table exists but is not a mapping (e.g., an array or scalar)
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text(
+        'tool = { toc-markdown = "not-a-dict" }\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigError, match=r"Invalid `\[tool\.toc-markdown\]` settings"):
+        load_config(tmp_path)
+
+
+def test_load_config_handles_null_table(tmp_path: Path):
+    """Test that config loading returns defaults when table is null (line 151)."""
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text(
+        "[tool.toc-markdown]\n",
+        encoding="utf-8",
+    )
+
+    config = load_config(tmp_path)
+
+    assert config == TocConfig()
+
+
+def test_load_config_skips_missing_table(tmp_path: Path):
+    """Test that config loading skips when table is missing (lines 130, 133, 140)."""
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text(
+        '[other-section]\nkey = "value"\n',
+        encoding="utf-8",
+    )
+
+    config = load_config(tmp_path)
+
+    assert config == TocConfig()
+
+
+def test_validate_config_rejects_non_bool_preserve_unicode():
+    """Test that validate_config errors when preserve_unicode is not a bool (line 231)."""
+    config = TocConfig(preserve_unicode="yes")  # type: ignore[arg-type]
+
+    with pytest.raises(ConfigError, match="`preserve_unicode` must be a boolean"):
+        validate_config(config)
+
+
+def test_validate_config_rejects_zero_indent_spaces(tmp_path: Path):
+    """Test that validate_config errors when indent_spaces is zero or negative (line 170)."""
+    _write_pyproject(
+        tmp_path,
+        """
+        [tool.toc-markdown]
+        indent_spaces = 0
+        """,
+    )
+
+    with pytest.raises(ConfigError, match="`indent_spaces` must be a positive integer"):
+        load_config(tmp_path)
+
+
+def test_validate_config_rejects_negative_indent_spaces(tmp_path: Path):
+    """Test that validate_config errors when indent_spaces is negative (line 170)."""
+    _write_pyproject(
+        tmp_path,
+        """
+        [tool.toc-markdown]
+        indent_spaces = -1
+        """,
+    )
+
+    with pytest.raises(ConfigError, match="`indent_spaces` must be a positive integer"):
+        load_config(tmp_path)
+
+
+def test_validate_config_rejects_non_integer_indent_spaces(tmp_path: Path):
+    """Test that validate_config errors when indent_spaces is not an integer."""
+    _write_pyproject(
+        tmp_path,
+        """
+        [tool.toc-markdown]
+        indent_spaces = "four"
+        """,
+    )
+
+    with pytest.raises(ConfigError, match="`indent_spaces` must be an integer"):
+        load_config(tmp_path)
