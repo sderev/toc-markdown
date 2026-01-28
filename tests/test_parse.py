@@ -501,3 +501,176 @@ def test_parse_markdown_requires_whitespace_after_hashes():
     result = parse_markdown(content)
 
     assert result.headers == ["## Valid"]
+
+
+# =============================================================================
+# Tests for parse_file error handling paths
+# =============================================================================
+
+
+def test_parse_file_rejects_bool_max_file_size(tmp_path: Path):
+    """Test that boolean max_file_size is rejected."""
+    target = _write_markdown(tmp_path, "## Heading\n")
+    with pytest.raises(ParseFileError) as exc_info:
+        parse_file(target, max_file_size=True)
+    assert "max_file_size` override must be a positive integer" in str(exc_info.value)
+
+
+def test_parse_file_rejects_string_max_file_size(tmp_path: Path):
+    """Test that string max_file_size is rejected."""
+    target = _write_markdown(tmp_path, "## Heading\n")
+    with pytest.raises(ParseFileError) as exc_info:
+        parse_file(target, max_file_size="1000")
+    assert "max_file_size` override must be a positive integer" in str(exc_info.value)
+
+
+def test_parse_file_rejects_negative_max_file_size(tmp_path: Path):
+    """Test that negative max_file_size is rejected."""
+    target = _write_markdown(tmp_path, "## Heading\n")
+    with pytest.raises(ParseFileError) as exc_info:
+        parse_file(target, max_file_size=-1)
+    assert "max_file_size` override must be a positive integer" in str(exc_info.value)
+
+
+def test_parse_file_rejects_zero_max_file_size(tmp_path: Path):
+    """Test that zero max_file_size is rejected."""
+    target = _write_markdown(tmp_path, "## Heading\n")
+    with pytest.raises(ParseFileError) as exc_info:
+        parse_file(target, max_file_size=0)
+    assert "max_file_size` override must be a positive integer" in str(exc_info.value)
+
+
+def test_parse_file_rejects_too_large_max_file_size(tmp_path: Path):
+    """Test that max_file_size exceeding MAX_CONFIGURED_FILE_SIZE is rejected."""
+    from toc_markdown.config import MAX_CONFIGURED_FILE_SIZE
+
+    target = _write_markdown(tmp_path, "## Heading\n")
+    with pytest.raises(ParseFileError) as exc_info:
+        parse_file(target, max_file_size=MAX_CONFIGURED_FILE_SIZE + 1)
+    assert "must be <=" in str(exc_info.value)
+
+
+def test_parse_file_rejects_bool_max_line_length(tmp_path: Path):
+    """Test that boolean max_line_length is rejected."""
+    target = _write_markdown(tmp_path, "## Heading\n")
+    with pytest.raises(ParseFileError) as exc_info:
+        parse_file(target, max_line_length=True)
+    assert "max_line_length` override must be a positive integer" in str(exc_info.value)
+
+
+def test_parse_file_rejects_string_max_line_length(tmp_path: Path):
+    """Test that string max_line_length is rejected."""
+    target = _write_markdown(tmp_path, "## Heading\n")
+    with pytest.raises(ParseFileError) as exc_info:
+        parse_file(target, max_line_length="1000")
+    assert "max_line_length` override must be a positive integer" in str(exc_info.value)
+
+
+def test_parse_file_rejects_negative_max_line_length(tmp_path: Path):
+    """Test that negative max_line_length is rejected."""
+    target = _write_markdown(tmp_path, "## Heading\n")
+    with pytest.raises(ParseFileError) as exc_info:
+        parse_file(target, max_line_length=-1)
+    assert "max_line_length` override must be a positive integer" in str(exc_info.value)
+
+
+def test_parse_file_handles_oserror_on_open(tmp_path: Path, monkeypatch):
+    """Test handling of OSError when opening file."""
+    import os
+
+    target = _write_markdown(tmp_path, "## Heading\n")
+
+    def mock_open(*args, **kwargs):
+        raise OSError(13, "Permission denied")
+
+    monkeypatch.setattr(os, "open", mock_open)
+
+    with pytest.raises(ParseFileError) as exc_info:
+        parse_file(target)
+    assert "Error accessing" in str(exc_info.value)
+
+
+def test_parse_file_handles_fdopen_error(tmp_path: Path, monkeypatch):
+    """Test handling of error from os.fdopen."""
+    import os
+
+    target = _write_markdown(tmp_path, "## Heading\n")
+
+    fd_closed = {"called": False}
+
+    def mock_fdopen(*args, **kwargs):
+        raise OSError(13, "fdopen failed")
+
+    def mock_close(fd):
+        fd_closed["called"] = True
+
+    monkeypatch.setattr(os, "fdopen", mock_fdopen)
+    monkeypatch.setattr(os, "close", mock_close)
+
+    with pytest.raises(ParseFileError):
+        parse_file(target)
+
+    assert fd_closed["called"], "File descriptor should be closed on fdopen error"
+
+
+def test_parse_file_handles_non_regular_file(tmp_path: Path, monkeypatch):
+    """Test handling of non-regular file."""
+    import os
+    import stat as stat_module
+
+    target = _write_markdown(tmp_path, "## Heading\n")
+
+    class MockStat:
+        st_mode = stat_module.S_IFDIR | 0o755
+        st_size = 100
+
+    def mock_fstat(*args, **kwargs):
+        return MockStat()
+
+    monkeypatch.setattr(os, "fstat", mock_fstat)
+
+    with pytest.raises(ParseFileError) as exc_info:
+        parse_file(target)
+    assert "is not a regular file" in str(exc_info.value)
+
+
+def test_parse_file_handles_file_size_exceeded(tmp_path: Path, monkeypatch):
+    """Test handling when file size exceeds limit."""
+    import os
+    import stat as stat_module
+
+    target = _write_markdown(tmp_path, "## Heading\n")
+
+    class MockStat:
+        st_mode = stat_module.S_IFREG | 0o644
+        st_size = 1000  # Larger than max_file_size
+
+    def mock_fstat(*args, **kwargs):
+        return MockStat()
+
+    monkeypatch.setattr(os, "fstat", mock_fstat)
+
+    with pytest.raises(ParseFileError) as exc_info:
+        parse_file(target, max_file_size=100)
+    assert "exceeds the maximum allowed size" in str(exc_info.value)
+
+
+def test_parse_file_handles_size_on_read(tmp_path: Path, monkeypatch):
+    """Test handling when read size exceeds limit."""
+    import os
+    import stat as stat_module
+
+    target = _write_markdown(tmp_path, "X" * 200)
+
+    class MockStat:
+        st_mode = stat_module.S_IFREG | 0o644
+        st_size = 50  # Smaller than actual
+
+    def mock_fstat(*args, **kwargs):
+        return MockStat()
+
+    monkeypatch.setattr(os, "fstat", mock_fstat)
+
+    with pytest.raises(ParseFileError) as exc_info:
+        parse_file(target, max_file_size=100)
+    assert "exceeds the maximum allowed size" in str(exc_info.value)

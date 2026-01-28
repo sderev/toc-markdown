@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import os
 import socket
 import stat
@@ -12,6 +13,7 @@ from unittest import mock
 import pytest
 
 import toc_markdown.cli as cli_module
+from toc_markdown.filesystem import safe_read, update_toc
 
 
 def _write(tmp_path: Path, name: str, content: str) -> Path:
@@ -716,3 +718,219 @@ def test_mocked_block_device_rejected(cli_runner, tmp_path, monkeypatch):
     result = cli_runner.invoke(cli_module.cli, [str(device_path)])
     assert result.exit_code != 0
     assert "is not a regular file" in _error_text(result)
+
+
+# =============================================================================
+# Tests for safe_read error handling paths (filesystem.py lines 279-299)
+# =============================================================================
+
+
+def test_safe_read_osopen_error(monkeypatch, tmp_path: Path):
+    """Test safe_read handles OSError from os.open."""
+    from toc_markdown.filesystem import safe_read
+
+    target = tmp_path / "test.md"
+    target.write_text("## Content\n", encoding="utf-8")
+
+    def mock_open(*args, **kwargs):
+        raise OSError(13, "Permission denied")
+
+    monkeypatch.setattr(os, "open", mock_open)
+
+    with pytest.raises(IOError) as exc_info:
+        safe_read(target)
+    assert "Error accessing" in str(exc_info.value)
+
+
+def test_safe_read_symlink_via_eloop(monkeypatch, tmp_path: Path):
+    """Test safe_read detects symlinks via ELOOP from O_NOFOLLOW."""
+    target = tmp_path / "test.md"
+    target.write_text("## Content\n", encoding="utf-8")
+
+    def mock_open(*args, **kwargs):
+        raise OSError(errno.ELOOP, "Too many levels of symbolic links")
+
+    monkeypatch.setattr(os, "open", mock_open)
+
+    with pytest.raises(IOError) as exc_info:
+        safe_read(target)
+    assert "Symlinks are not supported" in str(exc_info.value)
+
+
+def test_safe_read_fstat_error(monkeypatch, tmp_path: Path):
+    """Test safe_read handles error from os.fstat and closes fd."""
+    from toc_markdown.filesystem import safe_read
+
+    target = tmp_path / "test.md"
+    target.write_text("## Content\n", encoding="utf-8")
+
+    fd_closed = {"called": False}
+
+    def mock_fstat(*args, **kwargs):
+        raise OSError(13, "Permission denied")
+
+    def mock_close(fd):
+        fd_closed["called"] = True
+
+    monkeypatch.setattr(os, "fstat", mock_fstat)
+    monkeypatch.setattr(os, "close", mock_close)
+
+    with pytest.raises(IOError):
+        safe_read(target)
+
+    assert fd_closed["called"], "File descriptor should be closed on error"
+
+
+def test_safe_read_non_regular_file(monkeypatch, tmp_path: Path):
+    """Test safe_read rejects non-regular files."""
+    target = tmp_path / "test.md"
+    target.write_text("## Content\n", encoding="utf-8")
+
+    fd_closed = {"called": False}
+
+    class MockStat:
+        st_mode = stat.S_IFDIR | 0o755
+
+    def mock_fstat(*args, **kwargs):
+        return MockStat()
+
+    def mock_close(fd):
+        fd_closed["called"] = True
+
+    monkeypatch.setattr(os, "fstat", mock_fstat)
+    monkeypatch.setattr(os, "close", mock_close)
+
+    with pytest.raises(IOError) as exc_info:
+        safe_read(target)
+    assert "is not a regular file" in str(exc_info.value)
+    assert fd_closed["called"], "File descriptor should be closed on error"
+
+
+# =============================================================================
+# Tests for update_toc temp file cleanup (filesystem.py lines 374-394)
+# =============================================================================
+
+
+def test_update_toc_temp_cleanup_on_error(cli_runner, tmp_path, monkeypatch):
+    """Test temp file cleanup when update_toc fails during file operations."""
+    monkeypatch.chdir(tmp_path)
+    target = _write(
+        tmp_path,
+        "temp_cleanup.md",
+        """
+        <!-- TOC -->
+        ## Table of Contents
+
+        1. Old entry
+        <!-- /TOC -->
+        ## Heading
+        """,
+    )
+
+    temp_files_created = []
+
+    def mock_replace(src, dst):
+        temp_files_created.append(src)
+        raise OSError(13, "Permission denied during replace")
+
+    monkeypatch.setattr(os, "replace", mock_replace)
+
+    result = cli_runner.invoke(cli_module.cli, [str(target)])
+
+    assert result.exit_code != 0
+
+    for temp_file in temp_files_created:
+        assert not temp_file.exists(), f"Temp file {temp_file} should be cleaned up"
+
+
+def test_update_toc_temp_cleanup_unlink_fails(cli_runner, tmp_path, monkeypatch):
+    """Test temp file cleanup continues even if unlink fails."""
+    monkeypatch.chdir(tmp_path)
+    target = _write(
+        tmp_path,
+        "temp_cleanup_fail.md",
+        """
+        <!-- TOC -->
+        ## Table of Contents
+
+        1. Old entry
+        <!-- /TOC -->
+        ## Heading
+        """,
+    )
+
+    temp_files_created = []
+
+    def mock_replace(src, dst):
+        temp_files_created.append(src)
+        raise OSError(13, "Permission denied during replace")
+
+    monkeypatch.setattr(os, "replace", mock_replace)
+
+    unlink_calls = []
+
+    def mock_unlink(path, missing_ok=False):
+        unlink_calls.append(path)
+        raise OSError(13, "Permission denied during unlink")
+
+    monkeypatch.setattr(Path, "unlink", mock_unlink)
+
+    result = cli_runner.invoke(cli_module.cli, [str(target)])
+
+    assert result.exit_code != 0
+    assert len(unlink_calls) > 0, "unlink should have been attempted"
+
+
+def test_update_toc_chown_permission_error_with_warn(tmp_path, monkeypatch):
+    """Test update_toc handles chown PermissionError with warn callback."""
+    target = _write(
+        tmp_path,
+        "chown_warn.md",
+        """
+        ## Heading
+        ### Subheading
+        """,
+    )
+
+    warnings = []
+
+    def mock_warn(msg):
+        warnings.append(msg)
+
+    class MockStat:
+        st_mode = stat.S_IFREG | 0o644
+        st_size = 100
+        st_mtime_ns = 1234567890
+        st_atime_ns = 1234567890
+        st_ino = 12345
+        st_dev = 67890
+        st_uid = 1000
+        st_gid = 1000
+
+    def mock_stat_fn(path, *args, **kwargs):
+        return MockStat()
+
+    monkeypatch.setattr(os, "stat", mock_stat_fn)
+
+    def mock_chown(*args, **kwargs):
+        raise PermissionError("Operation not permitted")
+
+    monkeypatch.setattr(os, "chown", mock_chown)
+
+    full_file = target.read_text(encoding="utf-8").splitlines(keepends=True)
+    toc = ["<!-- TOC -->\n", "* [Heading](#heading)\n", "<!-- /TOC -->\n"]
+
+    update_toc(
+        full_file=full_file,
+        filepath=target,
+        toc=toc,
+        toc_start_line=0,
+        toc_end_line=-1,
+        expected_stat=MockStat(),
+        initial_stat=MockStat(),
+        warn=mock_warn,
+    )
+
+    assert len(warnings) == 1
+    assert "Could not preserve file ownership" in warnings[0]
+    assert "requires elevated privileges" in warnings[0]

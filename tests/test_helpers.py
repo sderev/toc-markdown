@@ -455,3 +455,109 @@ def test_strip_markdown_links_mixed_inline_and_reference():
     """Test mixing inline and reference-style links."""
     text = "[Inline](url) and [Reference][ref] links"
     assert strip_markdown_links(text) == "Inline and Reference links"
+
+
+def test_find_inline_code_spans_unmatched_backticks():
+    """Test that unmatched backticks don't create spans."""
+    from toc_markdown.parser import find_inline_code_spans
+
+    # Single backtick without closing
+    assert find_inline_code_spans("`code") == []
+    # Different number of opening and closing backticks
+    assert find_inline_code_spans("``code`") == []
+    # No backticks at all
+    assert find_inline_code_spans("no code") == []
+
+
+def test_find_inline_code_spans_escaped_backticks():
+    """Test that escaped backticks are not treated as delimiters."""
+    from toc_markdown.parser import find_inline_code_spans
+
+    # Escaped backtick should not start a code span
+    # In the string "\\`not code\\`", the backslash escapes the backtick
+    assert find_inline_code_spans("\\`not code\\`") == []
+    # Mixed: first backtick is escaped (\\`), the unescaped backtick at position 10
+    # starts a code span that ends at position 17 (the next backtick)
+    assert find_inline_code_spans("\\`not code` but `this` is") == [(10, 17)]
+
+
+def test_strip_markdown_links_angle_bracket_no_close():
+    """Test angle-bracketed URL without closing angle bracket."""
+    text = "[Link](<url)"
+    # Should not be treated as valid link since > is missing
+    assert strip_markdown_links(text) == "[Link](<url)"
+
+
+def test_strip_markdown_links_angle_bracket_no_close_paren():
+    """Test angle-bracketed URL without closing parenthesis."""
+    text = "[Link](<url>"
+    # Should not be treated as valid link since ) is missing
+    assert strip_markdown_links(text) == "[Link](<url>"
+
+
+def test_strip_markdown_links_unbalanced_brackets():
+    """Test unbalanced brackets are not treated as links."""
+    # This tests the case where we have nested brackets that ARE balanced
+    # The parser handles nested brackets by counting depth
+    text = "[Link[text]](url)"
+    # Nested brackets with proper closing
+    result = strip_markdown_links(text)
+    assert result == "Link[text]"
+
+
+def test_strip_markdown_links_incomplete_reference():
+    """Test incomplete reference-style link."""
+    text = "[Link][ref"
+    # Missing closing bracket for reference
+    assert strip_markdown_links(text) == "[Link][ref"
+
+
+def test_strip_markdown_links_empty_result_stack():
+    """Test image handling when result stack is empty."""
+    text = "![Alt](url)"
+    # This tests the edge case where result[-1] would fail if empty
+    assert strip_markdown_links(text) == "Alt"
+
+
+def test_strip_markdown_links_bracket_at_start():
+    """Test bracket at start of string."""
+    text = "[Link](url) text"
+    # Tests the i > 0 check for image detection
+    assert strip_markdown_links(text) == "Link text"
+
+
+def test_strip_markdown_links_escaped_bracket_in_code():
+    """Test escaped bracket inside inline code."""
+    text = r"Use `\[code]` syntax"
+    # Code should be preserved, including escaped bracket
+    assert strip_markdown_links(text) == r"Use `\[code]` syntax"
+
+
+def test_strip_markdown_links_no_url_after_bracket():
+    """Test bracket followed by neither ( nor [."""
+    text = "[Link] not a link"
+    # ] not followed by ( or [ means it's not a link
+    assert strip_markdown_links(text) == "[Link] not a link"
+
+
+def test_strip_markdown_links_angle_bracket_with_whitespace_only():
+    """Test angle-bracketed URL with only whitespace after >."""
+    text = "[Link](<url>   )"
+    # Whitespace between > and ) should be skipped
+    assert strip_markdown_links(text) == "Link"
+
+
+def test_strip_markdown_links_multiple_escaped_in_ref():
+    """Test multiple escaped characters in reference-style link."""
+    text = r"[Text][ref\]escaped]"
+    # The \] should be skipped and we look for next ]
+    result = strip_markdown_links(text)
+    # Should find the link and strip it
+    assert result == "Text"
+
+
+def test_strip_markdown_links_nested_brackets_complex():
+    """Test complex nested brackets in link text."""
+    text = "[[Nested]](url)"
+    # Should handle nested brackets
+    assert strip_markdown_links(text) == "[Nested]"
