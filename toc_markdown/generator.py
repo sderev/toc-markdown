@@ -1,7 +1,5 @@
 """Table of contents generation for markdown files."""
 
-from __future__ import annotations
-
 from .config import TocConfig, normalize_config, validate_config
 from .parser import strip_markdown_links
 from .slugify import generate_slug

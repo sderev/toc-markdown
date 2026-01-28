@@ -1,7 +1,5 @@
 """Constants used across the toc-markdown package."""
 
-from __future__ import annotations
-
 import re
 
 from .config import TocConfig

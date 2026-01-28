@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import pytest
 
 from toc_markdown.slugify import generate_slug

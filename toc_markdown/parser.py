@@ -1,7 +1,5 @@
 """Markdown parsing utilities."""
 
-from __future__ import annotations
-
 import errno
 import os
 import re

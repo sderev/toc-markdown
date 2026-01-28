@@ -1,7 +1,5 @@
 """Package-specific exception types."""
 
-from __future__ import annotations
-
 
 class ParseError(ValueError):
     """Base class for parsing-related errors.

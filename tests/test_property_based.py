@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import string
 
 from hypothesis import assume, given
