@@ -12,8 +12,8 @@ def _write(tmp_path: Path, filename: str, content: str) -> Path:
     return path
 
 
-def _write_pyproject(base: Path, body: str) -> Path:
-    path = base / "pyproject.toml"
+def _write_toc_markdown(base: Path, body: str) -> Path:
+    path = base / ".toc-markdown.toml"
     path.write_text(textwrap.dedent(body).lstrip(), encoding="utf-8")
     return path
 
@@ -146,12 +146,12 @@ def test_cli_rejects_unreasonably_large_toc(cli_runner, tmp_path, monkeypatch):
     assert "TOC section is suspiciously large" in result.output
 
 
-def test_cli_reads_config_from_pyproject(cli_runner, tmp_path, monkeypatch):
+def test_cli_reads_config_from_dotfile(cli_runner, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    _write_pyproject(
+    _write_toc_markdown(
         tmp_path,
         """
-        [tool.toc-markdown]
+        [toc-markdown]
         start_marker = "<!-- CUSTOM -->"
         end_marker = "<!-- /CUSTOM -->"
         header_text = "# Contents"
@@ -179,10 +179,10 @@ def test_cli_reads_config_from_pyproject(cli_runner, tmp_path, monkeypatch):
 
 def test_cli_flags_override_config(cli_runner, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    _write_pyproject(
+    _write_toc_markdown(
         tmp_path,
         """
-        [tool.toc-markdown]
+        [toc-markdown]
         start_marker = "<!-- CONFIG -->"
         end_marker = "<!-- /CONFIG -->"
         header_text = "# Config TOC"
@@ -262,10 +262,10 @@ def test_cli_preserve_unicode_flag(cli_runner, tmp_path, monkeypatch):
 
 def test_cli_respects_configured_preserve_unicode(cli_runner, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    _write_pyproject(
+    _write_toc_markdown(
         tmp_path,
         """
-        [tool.toc-markdown]
+        [toc-markdown]
         preserve_unicode = true
         """,
     )
@@ -291,10 +291,10 @@ def test_cli_public_api_excludes_header_pattern():
 def test_cli_handles_config_error(cli_runner, tmp_path, monkeypatch):
     """Test that CLI catches ConfigError and raises click.BadParameter."""
     monkeypatch.chdir(tmp_path)
-    _write_pyproject(
+    _write_toc_markdown(
         tmp_path,
         """
-        [tool.toc-markdown]
+        [toc-markdown]
         min_level = 5
         max_level = 2
         """,

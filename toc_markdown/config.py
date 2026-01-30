@@ -66,12 +66,10 @@ def load_config(search_path: Path) -> TocConfig:
     """Load configuration from the nearest config file.
 
     Walks parent directories from `search_path` to the filesystem root, reading
-    the ``[tool.toc-markdown]`` table from `pyproject.toml` and the
-    ``[toc-markdown]`` or ``[tool.toc-markdown]`` table from
-    `.toc-markdown.toml` when present. Returns default values when no
-    configuration is found. TOML files that cannot be read or decoded are
-    skipped. Raises a `ConfigError` when the table exists but is not a mapping
-    or contains unsupported keys.
+    the ``[toc-markdown]`` table from `.toc-markdown.toml` when present.
+    Returns default values when no configuration is found. TOML files that
+    cannot be read or decoded are skipped. Raises a `ConfigError` when the
+    table exists but is not a mapping or contains unsupported keys.
 
     Args:
         search_path: Directory used as the starting point for configuration lookup.
@@ -80,7 +78,7 @@ def load_config(search_path: Path) -> TocConfig:
         TocConfig: Loaded configuration with defaults applied when necessary.
 
     Raises:
-        ConfigError: If the `[tool.toc-markdown]` table is present but not a mapping or contains unsupported keys.
+        ConfigError: If the `[toc-markdown]` table is present but not a mapping or contains unsupported keys.
 
     Examples:
         load_config(Path("docs"))
@@ -88,15 +86,9 @@ def load_config(search_path: Path) -> TocConfig:
     current = search_path.resolve()
 
     while True:
-        pyproject_config = _load_from_file(
-            current / "pyproject.toml", table_paths=[("tool", "toc-markdown")]
-        )
-        if pyproject_config is not None:
-            return normalize_config(pyproject_config)
-
         dotfile_config = _load_from_file(
             current / ".toc-markdown.toml",
-            table_paths=[("toc-markdown",), ("tool", "toc-markdown")],
+            table_paths=[("toc-markdown",)],
         )
         if dotfile_config is not None:
             return normalize_config(dotfile_config)
