@@ -515,9 +515,9 @@ def test_ownership_skipped_when_unsupported(cli_runner, tmp_path, monkeypatch):
 
     with mock.patch(
         "toc_markdown.filesystem.getattr",
-        side_effect=lambda obj, attr, default=None: None
-        if attr in ("st_uid", "st_gid")
-        else getattr(obj, attr, default),
+        side_effect=lambda obj, attr, default=None: (
+            None if attr in ("st_uid", "st_gid") else getattr(obj, attr, default)
+        ),
     ):
         result = cli_runner.invoke(cli_module.cli, [str(target)])
 
