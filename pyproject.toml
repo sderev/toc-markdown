@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "toc-markdown"
-version = "0.0.2"
+version = "0.1.0"
 description = "Generate a table of contents for a Markdown file."
 readme = "README.md"
 license = {file = "LICENSE"}

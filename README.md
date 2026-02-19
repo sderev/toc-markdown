@@ -76,6 +76,15 @@ toc-markdown README.md --min-level 1 --max-level 4
 toc-markdown README.md --list-style "*"
 toc-markdown README.md --list-style "-"
 
+# Custom header text
+toc-markdown README.md --header-text "## Contents"
+
+# Preserve Unicode in slugs
+toc-markdown README.md --preserve-unicode
+
+# Custom indentation
+toc-markdown README.md --indent-chars "  "
+
 # Custom markers
 toc-markdown README.md --start-marker "<!-- BEGIN TOC -->" --end-marker "<!-- END TOC -->"
 ```
@@ -86,6 +95,8 @@ toc-markdown README.md --start-marker "<!-- BEGIN TOC -->" --end-marker "<!-- EN
 * Run from the directory tree that owns the target file. Files outside the working directory are rejected.
 * Symlinks are refused.
 * Files larger than 10 MiB are rejected. Increase via `max_file_size` in config or `TOC_MARKDOWN_MAX_FILE_SIZE` environment variable (up to 100 MiB).
+* Lines longer than 10,000 characters are rejected. Increase via `max_line_length` in config or `TOC_MARKDOWN_MAX_LINE_LENGTH` environment variable.
+* Files with more than 10,000 headers are rejected. Increase via `max_headers` in config.
 * Files must be valid UTF-8.
 * Updates use atomic writes via temporary files.
 
@@ -123,10 +134,16 @@ CLI flags override config file values.
 
 ## Integration with Vim
 
-Example mapping:
+Example mapping (for files with TOC markers):
 
 ```vim
-autocmd FileType markdown nnoremap <buffer> <leader>t :w<cr>:.!toc-markdown %:p<cr>
+autocmd FileType markdown nnoremap <buffer> <leader>t :w<cr>:silent !toc-markdown %:p<cr>:e<cr>
 ```
 
-Press `<leader>t` in normal mode to save and generate TOC.
+Press `<leader>t` in normal mode to save, update the TOC, and reload the buffer.
+
+For files without markers (insert TOC at cursor):
+
+```vim
+autocmd FileType markdown nnoremap <buffer> <leader>T :r !toc-markdown %:p<cr>
+```
