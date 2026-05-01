@@ -1,4 +1,5 @@
 import textwrap
+from importlib.metadata import version
 from pathlib import Path
 
 import toc_markdown.cli as cli_module
@@ -16,6 +17,13 @@ def _write_toc_markdown(base: Path, body: str) -> Path:
     path = base / ".toc-markdown.toml"
     path.write_text(textwrap.dedent(body).lstrip(), encoding="utf-8")
     return path
+
+
+def test_cli_reports_package_version(cli_runner):
+    result = cli_runner.invoke(cli, ["--version"], prog_name="toc-markdown")
+
+    assert result.exit_code == 0
+    assert result.output == f"toc-markdown, version {version('toc-markdown')}\n"
 
 
 def test_cli_prints_toc_when_missing(cli_runner, tmp_path, monkeypatch):

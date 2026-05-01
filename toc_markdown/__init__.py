@@ -22,8 +22,6 @@ from .models import ParseResult
 from .parser import parse_markdown, strip_markdown_links
 from .slugify import generate_slug
 
-__version__ = "0.0.2"
-
 __all__ = [
     # Core functionality
     "parse_markdown",
@@ -38,6 +36,4 @@ __all__ = [
     "LineTooLongError",
     "ParseError",
     "TooManyHeadersError",
-    # Version
-    "__version__",
 ]
