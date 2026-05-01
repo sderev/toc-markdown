@@ -10,6 +10,13 @@ Fragments are collected in `changelog.d/` and compiled into this file at release
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.1.1'></a>
+## 0.1.1 — 2026-05-01
+
+### Change
+
+* Allow `toc-markdown` to process explicit file paths outside the current working directory.
+
 <a id='changelog-0.1.0'></a>
 ## 0.1.0 — 2026-02-19
 
