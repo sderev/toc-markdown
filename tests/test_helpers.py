@@ -8,7 +8,6 @@ import pytest
 from toc_markdown.config import MAX_CONFIGURED_FILE_SIZE
 from toc_markdown.filesystem import (
     collect_file_stat,
-    contains_symlink,
     get_max_file_size,
     get_max_line_length,
     normalize_filepath,
@@ -75,35 +74,18 @@ def test_normalize_filepath_rejects_directory(tmp_path: Path):
         normalize_filepath(str(folder))
 
 
-def test_contains_symlink_handles_oserror(monkeypatch, tmp_path: Path):
-    probe = tmp_path / "probe.md"
-    probe.write_text("## Heading\n", encoding="utf-8")
-    original_is_symlink = Path.is_symlink
-    call_count = {"count": 0}
-
-    def _flaky_is_symlink(self):
-        if self == probe and call_count["count"] == 0:
-            call_count["count"] += 1
-            raise OSError("stat boom")
-        return original_is_symlink(self)
-
-    monkeypatch.setattr(Path, "is_symlink", _flaky_is_symlink)
-    assert contains_symlink(probe) is False
-
-
 def test_collect_file_stat_handles_missing_file(tmp_path: Path):
     with pytest.raises(IOError):
         collect_file_stat(tmp_path / "missing.md")
 
 
-def test_collect_file_stat_rejects_symlink(tmp_path: Path):
+def test_collect_file_stat_follows_symlink(tmp_path: Path):
     target = tmp_path / "actual.md"
     target.write_text("## Heading\n", encoding="utf-8")
     link = tmp_path / "alias.md"
     os.symlink(target, link)
 
-    with pytest.raises(IOError):
-        collect_file_stat(link)
+    assert collect_file_stat(link).st_ino == target.stat().st_ino
 
 
 def test_collect_file_stat_rejects_directory(tmp_path: Path):

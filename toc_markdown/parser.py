@@ -1,6 +1,5 @@
 """Markdown parsing utilities."""
 
-import errno
 import os
 import re
 import stat
@@ -689,17 +688,10 @@ def parse_file(
             flags |= os.O_BINARY
         if hasattr(os, "O_CLOEXEC"):
             flags |= os.O_CLOEXEC
-        if hasattr(os, "O_NOFOLLOW"):
-            flags |= os.O_NOFOLLOW
         if hasattr(os, "O_NONBLOCK"):
             flags |= os.O_NONBLOCK
 
-        try:
-            fd = os.open(filepath, flags)
-        except OSError as error:
-            if error.errno == errno.ELOOP:
-                raise ParseFileError(f"Symlinks are not supported: {filepath}.") from error
-            raise
+        fd = os.open(filepath, flags)
 
         try:
             file = os.fdopen(fd, "rb")

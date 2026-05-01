@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import errno
 import os
 import socket
 import stat
@@ -27,7 +26,7 @@ def _error_text(result) -> str:
 
 
 @pytest.mark.skipif(not hasattr(os, "symlink"), reason="Symlink support is required")
-def test_symlink_rejected(cli_runner, tmp_path, monkeypatch):
+def test_symlink_followed(cli_runner, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     source = _write(
         tmp_path,
@@ -43,8 +42,39 @@ def test_symlink_rejected(cli_runner, tmp_path, monkeypatch):
         pytest.skip(f"Unable to create symlink: {error}")
 
     result = cli_runner.invoke(cli_module.cli, [str(link)])
-    assert result.exit_code != 0
-    assert "Symlinks" in result.output
+    assert result.exit_code == 0
+    assert "1. [Heading](#heading)" in result.output
+
+
+@pytest.mark.skipif(not hasattr(os, "symlink"), reason="Symlink support is required")
+def test_symlink_update_modifies_target_without_replacing_link(cli_runner, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    source = _write(
+        tmp_path,
+        "source.md",
+        """
+        <!-- TOC -->
+        ## Table of Contents
+
+        1. Old entry
+        <!-- /TOC -->
+        ## Heading
+        ### Details
+        """,
+    )
+    link = tmp_path / "alias.md"
+    try:
+        os.symlink(source, link, target_is_directory=False)
+    except OSError as error:  # pragma: no cover - platform dependent
+        pytest.skip(f"Unable to create symlink: {error}")
+
+    result = cli_runner.invoke(cli_module.cli, [str(link)])
+
+    assert result.exit_code == 0
+    assert link.is_symlink()
+    contents = source.read_text(encoding="utf-8")
+    assert "1. [Heading](#heading)" in contents
+    assert "    1. [Details](#details)" in contents
 
 
 def test_explicit_file_outside_working_directory_allowed(cli_runner, tmp_path, monkeypatch):
@@ -741,19 +771,19 @@ def test_safe_read_osopen_error(monkeypatch, tmp_path: Path):
     assert "Error accessing" in str(exc_info.value)
 
 
-def test_safe_read_symlink_via_eloop(monkeypatch, tmp_path: Path):
-    """Test safe_read detects symlinks via ELOOP from O_NOFOLLOW."""
+def test_safe_read_reports_open_eloop(monkeypatch, tmp_path: Path):
+    """Test safe_read handles ELOOP from os.open."""
     target = tmp_path / "test.md"
     target.write_text("## Content\n", encoding="utf-8")
 
     def mock_open(*args, **kwargs):
-        raise OSError(errno.ELOOP, "Too many levels of symbolic links")
+        raise OSError(40, "Too many levels of symbolic links")
 
     monkeypatch.setattr(os, "open", mock_open)
 
     with pytest.raises(IOError) as exc_info:
         safe_read(target)
-    assert "Symlinks are not supported" in str(exc_info.value)
+    assert "Error accessing" in str(exc_info.value)
 
 
 def test_safe_read_fstat_error(monkeypatch, tmp_path: Path):

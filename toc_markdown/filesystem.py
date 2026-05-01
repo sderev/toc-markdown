@@ -1,6 +1,5 @@
 """Filesystem helpers for toc-markdown."""
 
-import errno
 import io
 import os
 import stat
@@ -93,27 +92,6 @@ def get_max_line_length(default: int = DEFAULT_MAX_LINE_LENGTH) -> int:
     return max_length
 
 
-def contains_symlink(path: Path) -> bool:
-    """Check whether a path or any parent directory is a symlink.
-
-    Args:
-        path: Path to inspect.
-
-    Returns:
-        bool: True when a symlink is encountered, otherwise False.
-
-    Examples:
-        contains_symlink(Path("/tmp/link/child"))
-    """
-    for candidate in (path, *path.parents):
-        try:
-            if candidate.is_symlink():
-                return True
-        except OSError:
-            continue
-    return False
-
-
 def normalize_filepath(raw_path: str) -> Path:
     """Resolve and validate a Markdown filepath.
 
@@ -125,17 +103,13 @@ def normalize_filepath(raw_path: str) -> Path:
 
     Raises:
         ValueError: If the path does not exist, uses an unsupported extension,
-            or traverses a symlink.
+            or is not a regular file.
 
     Examples:
         normalize_filepath("docs/README.md")
         normalize_filepath("~/notes.md")
     """
     path = Path(raw_path).expanduser()
-
-    if contains_symlink(path):
-        error_message = f"Symlinks are not supported: {path}."
-        raise ValueError(error_message)
 
     try:
         resolved = path.resolve(strict=True)
@@ -159,29 +133,25 @@ def normalize_filepath(raw_path: str) -> Path:
 
 
 def collect_file_stat(filepath: Path) -> os.stat_result:
-    """Return stat information for a file while disallowing symlinks.
+    """Return stat information for a file.
 
     Args:
         filepath: Path to the file.
 
     Returns:
-        os.stat_result: File metadata gathered without following symlinks.
+        os.stat_result: File metadata.
 
     Raises:
-        IOError: If the path is inaccessible, a symlink, or not a regular file.
+        IOError: If the path is inaccessible or not a regular file.
 
     Examples:
         stat_result = collect_file_stat(Path("README.md"))
     """
     try:
-        stat_result = os.stat(filepath, follow_symlinks=False)
+        stat_result = os.stat(filepath, follow_symlinks=True)
     except OSError as error:
         error_message = f"Error accessing {filepath}: {error}"
         raise IOError(error_message) from error
-
-    if stat.S_ISLNK(stat_result.st_mode):
-        error_message = f"Symlinks are not supported: {filepath}."
-        raise IOError(error_message)
 
     if not stat.S_ISREG(stat_result.st_mode):
         error_message = f"{filepath} is not a regular file."
@@ -270,16 +240,12 @@ def safe_read(filepath: Path) -> io.TextIOBase:
         flags |= os.O_BINARY
     if hasattr(os, "O_CLOEXEC"):
         flags |= os.O_CLOEXEC
-    if hasattr(os, "O_NOFOLLOW"):
-        flags |= os.O_NOFOLLOW
     if hasattr(os, "O_NONBLOCK"):
         flags |= os.O_NONBLOCK
 
     try:
         fd = os.open(filepath, flags)
     except OSError as error:
-        if error.errno == errno.ELOOP:
-            raise IOError(f"Symlinks are not supported: {filepath}.") from error
         error_message = f"Error accessing {filepath}: {error}"
         raise IOError(error_message) from error
 
@@ -325,6 +291,7 @@ def update_toc(
     Examples:
         update_toc(full_file, Path("README.md"), toc_lines, toc_start, toc_end, post_stat, pre_stat)
     """
+    filepath = filepath.resolve(strict=True)
     current_stat = collect_file_stat(filepath)
     ensure_file_unchanged(expected_stat, current_stat, filepath)
 
