@@ -10,6 +10,13 @@ Fragments are collected in `changelog.d/` and compiled into this file at release
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.1.2'></a>
+## 0.1.2 — 2026-05-02
+
+### Change
+
+* Follow symlinks when reading and updating Markdown files.
+
 <a id='changelog-0.1.1'></a>
 ## 0.1.1 — 2026-05-01
 
