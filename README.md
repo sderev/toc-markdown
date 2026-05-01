@@ -92,7 +92,6 @@ toc-markdown README.md --start-marker "<!-- BEGIN TOC -->" --end-marker "<!-- EN
 ### Safety Limits
 
 * Only regular Markdown files (`.md`, `.markdown`) are accepted.
-* Explicit relative, absolute, and home-relative file paths are accepted.
 * Symlinks are refused.
 * Files larger than 10 MiB are rejected. Increase via `max_file_size` in config or `TOC_MARKDOWN_MAX_FILE_SIZE` environment variable (up to 100 MiB).
 * Lines longer than 10,000 characters are rejected. Increase via `max_line_length` in config or `TOC_MARKDOWN_MAX_LINE_LENGTH` environment variable.
