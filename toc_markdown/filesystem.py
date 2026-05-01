@@ -114,23 +114,22 @@ def contains_symlink(path: Path) -> bool:
     return False
 
 
-def normalize_filepath(raw_path: str, base_dir: Path) -> Path:
-    """Resolve and validate a Markdown filepath under a base directory.
+def normalize_filepath(raw_path: str) -> Path:
+    """Resolve and validate a Markdown filepath.
 
     Args:
         raw_path: User-supplied path to a Markdown file (absolute or relative).
-        base_dir: Working directory that constrains allowed paths.
 
     Returns:
         Path: Absolute path to the Markdown file.
 
     Raises:
-        ValueError: If the path does not exist, is outside `base_dir`, uses an
-            unsupported extension, or traverses a symlink.
+        ValueError: If the path does not exist, uses an unsupported extension,
+            or traverses a symlink.
 
     Examples:
-        normalize_filepath("docs/README.md", Path.cwd())
-        normalize_filepath("~/notes.md", Path.cwd())
+        normalize_filepath("docs/README.md")
+        normalize_filepath("~/notes.md")
     """
     path = Path(raw_path).expanduser()
 
@@ -150,12 +149,6 @@ def normalize_filepath(raw_path: str, base_dir: Path) -> Path:
     if not resolved.is_file():
         error_message = f"{resolved} is not a regular file."
         raise ValueError(error_message)
-
-    try:
-        resolved.relative_to(base_dir)
-    except ValueError as error:
-        error_message = f"{resolved} is outside of the working directory {base_dir}."
-        raise ValueError(error_message) from error
 
     if resolved.suffix.lower() not in MARKDOWN_EXTENSIONS:
         error_message = f"{resolved} is not a Markdown file.\n"

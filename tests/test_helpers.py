@@ -50,13 +50,12 @@ def test_get_max_line_length_rejects_non_positive(monkeypatch):
 
 def test_normalize_filepath_missing_file(tmp_path: Path):
     with pytest.raises(ValueError):
-        normalize_filepath(str(tmp_path / "missing.md"), tmp_path)
+        normalize_filepath(str(tmp_path / "missing.md"))
 
 
 def test_normalize_filepath_handles_oserror(monkeypatch, tmp_path: Path):
     target = tmp_path / "doc.md"
     target.write_text("## Heading\n", encoding="utf-8")
-    base_dir = tmp_path
     original_resolve = Path.resolve
 
     def _raise_oserror(self, strict=True):
@@ -66,14 +65,14 @@ def test_normalize_filepath_handles_oserror(monkeypatch, tmp_path: Path):
 
     monkeypatch.setattr(Path, "resolve", _raise_oserror)
     with pytest.raises(ValueError):
-        normalize_filepath(str(target), base_dir)
+        normalize_filepath(str(target))
 
 
 def test_normalize_filepath_rejects_directory(tmp_path: Path):
     folder = tmp_path / "folder"
     folder.mkdir()
     with pytest.raises(ValueError):
-        normalize_filepath(str(folder), tmp_path)
+        normalize_filepath(str(folder))
 
 
 def test_contains_symlink_handles_oserror(monkeypatch, tmp_path: Path):

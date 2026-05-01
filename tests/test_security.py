@@ -6,7 +6,6 @@ import socket
 import stat
 import textwrap
 import time
-import uuid
 from pathlib import Path
 from unittest import mock
 
@@ -48,17 +47,17 @@ def test_symlink_rejected(cli_runner, tmp_path, monkeypatch):
     assert "Symlinks" in result.output
 
 
-def test_path_traversal_prevented(cli_runner, tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    outside = tmp_path.parent / f"outside-{uuid.uuid4().hex}.md"
+def test_explicit_file_outside_working_directory_allowed(cli_runner, tmp_path, monkeypatch):
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    outside = tmp_path / "outside.md"
     outside.write_text("## Outside\n", encoding="utf-8")
+    monkeypatch.chdir(work_dir)
 
-    try:
-        result = cli_runner.invoke(cli_module.cli, [str(outside)])
-        assert result.exit_code != 0
-        assert "outside of the working directory" in result.output
-    finally:
-        outside.unlink(missing_ok=True)
+    result = cli_runner.invoke(cli_module.cli, [str(outside)])
+
+    assert result.exit_code == 0
+    assert "1. [Outside](#outside)" in result.output
 
 
 def test_file_size_limit_enforced(cli_runner, tmp_path, monkeypatch):

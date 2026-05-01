@@ -3,8 +3,6 @@ Generates a table of contents for a markdown file.
 If an existing TOC is present, it updates it; otherwise, it outputs it to stdout.
 """
 
-from pathlib import Path
-
 import click
 
 from .config import ConfigError, build_config
@@ -81,9 +79,8 @@ def cli(
     Examples:
         toc-markdown README.md --min-level 2 --list-style "-"
     """
-    base_dir = Path.cwd().resolve()
     try:
-        filepath = normalize_filepath(filepath, base_dir)
+        filepath = normalize_filepath(filepath)
     except ValueError as error:
         raise click.BadParameter(str(error)) from error
     try:
