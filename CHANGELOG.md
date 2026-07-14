@@ -10,6 +10,13 @@ Fragments are collected in `changelog.d/` and compiled into this file at release
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.1.3'></a>
+## 0.1.3 — 2026-07-14
+
+### Security
+
+* Update `idna` and `urllib3` to patched versions for current Dependabot security advisories.
+
 <a id='changelog-0.1.2'></a>
 ## 0.1.2 — 2026-05-02
 
