@@ -107,7 +107,7 @@ def cli(
     try:
         initial_stat = collect_file_stat(filepath)
         enforce_file_size(initial_stat, max_file_size, filepath)
-    except IOError as error:
+    except OSError as error:
         raise click.ClickException(str(error)) from error
 
     try:
@@ -120,7 +120,7 @@ def cli(
     try:
         post_parse_stat = collect_file_stat(filepath)
         ensure_file_unchanged(initial_stat, post_parse_stat, filepath)
-    except IOError as error:
+    except OSError as error:
         raise click.ClickException(str(error)) from error
 
     toc = generate_toc(headers, config)
@@ -142,7 +142,7 @@ def cli(
                 initial_stat,
                 warn=lambda message: click.echo(message, err=True),
             )
-        except IOError as error:
+        except OSError as error:
             raise click.ClickException(str(error)) from error
     # Inserts TOC
     else:

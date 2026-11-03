@@ -151,11 +151,11 @@ def collect_file_stat(filepath: Path) -> os.stat_result:
         stat_result = os.stat(filepath, follow_symlinks=True)
     except OSError as error:
         error_message = f"Error accessing {filepath}: {error}"
-        raise IOError(error_message) from error
+        raise OSError(error_message) from error
 
     if not stat.S_ISREG(stat_result.st_mode):
         error_message = f"{filepath} is not a regular file."
-        raise IOError(error_message)
+        raise OSError(error_message)
 
     return stat_result
 
@@ -179,7 +179,7 @@ def enforce_file_size(stat_result: os.stat_result, max_size: int, filepath: Path
     """
     if stat_result.st_size > max_size:
         error_message = f"{filepath} exceeds the maximum allowed size of {max_size} bytes."
-        raise IOError(error_message)
+        raise OSError(error_message)
 
 
 def ensure_file_unchanged(
@@ -216,7 +216,7 @@ def ensure_file_unchanged(
 
     if fingerprint_before != fingerprint_after:
         error_message = f"{filepath} changed during processing; refusing to overwrite."
-        raise IOError(error_message)
+        raise OSError(error_message)
 
 
 def safe_read(filepath: Path) -> io.TextIOBase:
@@ -247,12 +247,12 @@ def safe_read(filepath: Path) -> io.TextIOBase:
         fd = os.open(filepath, flags)
     except OSError as error:
         error_message = f"Error accessing {filepath}: {error}"
-        raise IOError(error_message) from error
+        raise OSError(error_message) from error
 
     try:
         file_stat = os.fstat(fd)
         if not stat.S_ISREG(file_stat.st_mode):
-            raise IOError(f"{filepath} is not a regular file.")
+            raise OSError(f"{filepath} is not a regular file.")
         return os.fdopen(fd, "r", encoding="utf-8")
     except Exception:
         os.close(fd)

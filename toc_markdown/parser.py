@@ -516,9 +516,10 @@ def parse_markdown(
             _try_close_fence(precomp_ctx, line)
             continue
 
-        if precomp_ctx.state is ParserState.IN_INDENTED_CODE:
-            if _try_exit_indented_code(precomp_ctx, line):
-                continue
+        if precomp_ctx.state is ParserState.IN_INDENTED_CODE and _try_exit_indented_code(
+            precomp_ctx, line
+        ):
+            continue
 
         if _try_open_fence(precomp_ctx, line):
             continue
@@ -548,9 +549,8 @@ def parse_markdown(
             _try_close_fence(ctx, line)
             continue
 
-        if ctx.state is ParserState.IN_INDENTED_CODE:
-            if _try_exit_indented_code(ctx, line):
-                continue
+        if ctx.state is ParserState.IN_INDENTED_CODE and _try_exit_indented_code(ctx, line):
+            continue
 
         if ctx.state is ParserState.IN_TOC:
             if _try_enter_toc(ctx, line_number, toc_start_to_end, toc_end_stack):

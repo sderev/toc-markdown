@@ -23,17 +23,13 @@ from .parser import parse_markdown, strip_markdown_links
 from .slugify import generate_slug
 
 __all__ = [
-    # Core functionality
-    "parse_markdown",
-    "generate_toc_entries",
-    "generate_slug",
-    "strip_markdown_links",
-    # Data models
-    "ParseResult",
-    # Utilities
-    "validate_toc_markers",
-    # Exceptions
     "LineTooLongError",
     "ParseError",
+    "ParseResult",
     "TooManyHeadersError",
+    "generate_slug",
+    "generate_toc_entries",
+    "parse_markdown",
+    "strip_markdown_links",
+    "validate_toc_markers",
 ]
